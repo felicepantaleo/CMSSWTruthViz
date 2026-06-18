@@ -23,6 +23,8 @@ const UploadManager = {
         this.form = document.getElementById('upload-form');
         this.dotFileInput = document.getElementById('dot-file-input');
         this.dotFileInfo = document.getElementById('dot-file-info');
+        this.dotUrlInput = document.getElementById('dot-url-input');
+        this.loadUrlBtn = document.getElementById('load-url-btn');
         this.rootFileInput = document.getElementById('root-file-input');
         this.rootFileInfo = document.getElementById('root-file-info');
         this.rechitsEventIndexInput = document.getElementById('rechits-event-index-input');
@@ -71,6 +73,21 @@ const UploadManager = {
             e.preventDefault();
             this.handleUpload();
         });
+
+        // Load from URL
+        if (this.loadUrlBtn) {
+            this.loadUrlBtn.addEventListener('click', () => {
+                this.handleLoadUrl(this.dotUrlInput ? this.dotUrlInput.value : '');
+            });
+        }
+        if (this.dotUrlInput) {
+            this.dotUrlInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.handleLoadUrl(this.dotUrlInput.value);
+                }
+            });
+        }
     },
 
     /**
@@ -174,6 +191,53 @@ const UploadManager = {
             this.submitBtn.disabled = false;
 
             alert(`Upload failed: ${error.message}`);
+        }
+    },
+
+    /**
+     * Fetch and process a DOT graph from a URL (server-side, no browser CORS).
+     * Reuses the same build-and-reload flow as a file upload. On success the page
+     * reloads to the clean path so a ?dot= deep link does not re-trigger the build.
+     */
+    async handleLoadUrl(url) {
+        const trimmedUrl = String(url || '').trim();
+        if (!trimmedUrl) {
+            alert('Please enter a DOT file URL');
+            return;
+        }
+
+        // Make sure the modal is visible so the build progress is shown.
+        this.modal.classList.remove('hidden');
+        this.uploadProgress.classList.remove('hidden');
+        this.uploadStatus.textContent = 'Fetching DOT from URL...';
+        this.submitBtn.disabled = true;
+        if (this.loadUrlBtn) this.loadUrlBtn.disabled = true;
+
+        try {
+            const response = await fetch('../load-url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: trimmedUrl })
+            });
+
+            const result = await this.parseJsonResponse(response, 'Load from URL');
+
+            if (result.success) {
+                this.uploadStatus.textContent = 'DOT fetched. Processing...';
+                await this.waitForBundleBuild();
+                this.uploadStatus.textContent = 'Processed successfully! Reloading...';
+                setTimeout(() => {
+                    window.location.assign(window.location.pathname);
+                }, 1200);
+            } else {
+                throw new Error(result.error || 'Load from URL failed');
+            }
+        } catch (error) {
+            console.error('Load from URL error:', error);
+            this.uploadStatus.textContent = `Error: ${error.message}`;
+            this.submitBtn.disabled = false;
+            if (this.loadUrlBtn) this.loadUrlBtn.disabled = false;
+            alert(`Load from URL failed: ${error.message}`);
         }
     },
 

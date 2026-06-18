@@ -16,7 +16,34 @@ import threading
 import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+import urllib.request
+import urllib.error
 import cgi
+
+
+# Cap and timeout for fetching a DOT graph from a URL. The largest truth-graph
+# DOT (full TenTau SIM cascade) is ~20 MB, so 200 MB leaves generous headroom.
+DOT_URL_MAX_BYTES = 200 * 1024 * 1024
+DOT_URL_TIMEOUT_SECONDS = 120
+
+
+def fetch_dot_from_url(url):
+    """Fetch a DOT graph from an http(s) URL, with a size cap and timeout."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("Only http and https URLs are supported")
+
+    request = urllib.request.Request(url, headers={"User-Agent": "CMSSWTruthViz"})
+    with urllib.request.urlopen(request, timeout=DOT_URL_TIMEOUT_SECONDS) as response:
+        # Read one byte past the cap so we can detect oversize inputs.
+        data = response.read(DOT_URL_MAX_BYTES + 1)
+
+    if len(data) > DOT_URL_MAX_BYTES:
+        raise ValueError(f"DOT file exceeds the {DOT_URL_MAX_BYTES // (1024 * 1024)} MB limit")
+    if not data:
+        raise ValueError("The URL returned an empty response")
+
+    return data
 
 
 EMPTY_BUNDLE = {
@@ -183,8 +210,76 @@ class CORSRequestHandler(http.server.SimpleHTTPRequestHandler):
         path = urlparse(self.path).path.rstrip('/')
         if path == '/upload' or path.endswith('/upload'):
             self.handle_upload()
+        elif path == '/load-url' or path.endswith('/load-url'):
+            self.handle_load_url()
         else:
             self.send_json_response({'success': False, 'error': 'Not Found'}, 404)
+
+    def handle_load_url(self):
+        """Fetch a DOT graph from a URL (server-side, so no browser CORS) and
+        regenerate the bundle, reusing the same background build as uploads."""
+        try:
+            length = int(self.headers.get('Content-Length', 0) or 0)
+            raw_body = self.rfile.read(length) if length > 0 else b''
+            try:
+                payload = json.loads(raw_body.decode('utf-8')) if raw_body else {}
+            except (ValueError, UnicodeDecodeError):
+                self.send_json_response({'success': False, 'error': 'Invalid JSON body'}, 400)
+                return
+
+            url = str(payload.get('url') or '').strip()
+            if not url:
+                self.send_json_response({'success': False, 'error': 'A DOT file URL is required'}, 400)
+                return
+
+            project_root = Path(__file__).parent
+
+            if get_build_status()["state"] in {"queued", "running"}:
+                self.send_json_response({
+                    'success': False,
+                    'error': 'A bundle build is already running'
+                }, 409)
+                return
+
+            try:
+                data = fetch_dot_from_url(url)
+            except (ValueError, urllib.error.URLError, OSError) as exc:
+                self.send_json_response({
+                    'success': False,
+                    'error': f'Could not fetch DOT URL: {exc}'
+                }, 400)
+                return
+
+            dot_path = project_root / "truthgraph.dot"
+            with open(dot_path, 'wb') as f:
+                f.write(data)
+            print(f"\nFetched DOT from {url} ({len(data):,} bytes) -> {dot_path}")
+
+            set_build_status(
+                state="queued",
+                message="DOT fetched from URL. Processing is starting...",
+                startedAt=time.time(),
+                finishedAt=None,
+            )
+            thread = threading.Thread(
+                target=run_uploaded_build,
+                args=(project_root, dot_path, None, 0),
+                daemon=True,
+            )
+            thread.start()
+
+            self.send_json_response({
+                'success': True,
+                'message': 'DOT fetched from URL. Processing is running.',
+                'build': get_build_status(),
+            }, 202)
+
+        except Exception as e:
+            print(f"  ERROR: {str(e)}")
+            self.send_json_response({
+                'success': False,
+                'error': f'Load from URL failed: {str(e)}'
+            }, 500)
 
     def handle_upload(self):
         """Handle file upload and bundle regeneration"""

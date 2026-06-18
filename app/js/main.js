@@ -23,6 +23,18 @@ async function initApp() {
     const staticMode = isStaticMode();
     console.log(`Mode: ${staticMode ? 'Static (file://)' : 'Server (http://)'}`);
 
+    // Shareable deep link: ?dot=<url> fetches and builds that graph server-side,
+    // then reloads to the clean path. Only available in server mode.
+    if (!staticMode) {
+        const dotUrl = new URLSearchParams(window.location.search).get('dot');
+        if (dotUrl) {
+            console.log('Loading DOT from URL parameter:', dotUrl);
+            UploadManager.init();
+            UploadManager.handleLoadUrl(dotUrl);
+            return;
+        }
+    }
+
     try {
         // Show loading indicator
         showLoading(true);

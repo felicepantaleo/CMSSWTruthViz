@@ -253,7 +253,16 @@
                 <button id="modal-close-btn">&times;</button>
             </div>
             <div class="modal-body">
-                <p>Upload a DOT graph and, optionally, a ROOT file with rechits.</p>
+                <p>Load a DOT graph from a URL, or upload one (optionally with a ROOT rechits file).</p>
+                <div class="form-group">
+                    <label for="dot-url-input">Graph URL (.dot/.gv):</label>
+                    <div style="display:flex; gap:6px;">
+                        <input type="url" id="dot-url-input" placeholder="https://host/path/graph.dot" style="flex:1;">
+                        <button type="button" id="load-url-btn">Load URL</button>
+                    </div>
+                    <span class="file-info">Tip: open <code>?dot=&lt;url&gt;</code> to share a direct link.</span>
+                </div>
+                <hr>
                 <form id="upload-form">
                     <div class="form-group">
                         <label for="dot-file-input">Graph (truthgraph.dot):</label>
