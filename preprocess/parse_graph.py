@@ -209,6 +209,13 @@ def parse_dot_file(dot_path):
             for key, value in attrs.items()
         }
 
+        # Skip invisible layout-helper nodes. The truth-graph dumper adds a hidden
+        # "__center__" hub (shape=point, style=invis) with invisible weighted spokes
+        # to drive the neato radial layout; it is meaningless in an interactive view.
+        # Edges referencing it are dropped automatically by the valid-node check below.
+        if node_id == "__center__" or "invis" in str(clean_attrs.get("style", "")).lower():
+            continue
+
         # Build a readable display label from DOT attributes. The raw Graphviz
         # label is preserved separately because truthgraph.dot uses HTML labels.
         raw_label = clean_attrs.get("label")

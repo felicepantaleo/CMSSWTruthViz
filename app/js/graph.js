@@ -34,6 +34,53 @@ const GraphManager = {
     statusOneNodeColor: '#ff9589',
     smallParticlePdgIds: new Set([22, 11, -11]),
 
+    // The truth-graph DOT dumper encodes the role of a node in its Graphviz shape.
+    // Map those onto the Cytoscape shape vocabulary so the producer's intent shows
+    // through (seed, muon, and the four vertex kinds are immediately recognisable).
+    gvShapeToCytoscape: {
+        doublecircle: 'ellipse',    // selection seed (rendered with a gold double ring)
+        circle: 'ellipse',
+        ellipse: 'ellipse',         // particle leaving tracker/calo hits
+        oval: 'ellipse',
+        hexagon: 'hexagon',         // muon
+        diamond: 'diamond',         // decay / production vertex
+        box: 'round-rectangle',     // underlying-event vertex
+        rect: 'round-rectangle',
+        rectangle: 'round-rectangle',
+        house: 'pentagon',          // ISR / upstream vertex
+        doubleoctagon: 'octagon',   // hard-interaction vertex
+        octagon: 'octagon',
+        star: 'star',
+    },
+
+    // Graphviz uses X11 colour names, several of them numbered variants
+    // (darkseagreen1, goldenrod4, red2, gray20, ...) that are NOT valid CSS and
+    // would render as black/transparent in the browser. Translate the ones the
+    // truth-graph dumper emits to the exact hex graphviz itself uses, so the
+    // interactive view matches the static SVGs. Plain CSS names pass through.
+    gvColors: {
+        aliceblue: '#f0f8ff', blue: '#0000ff', darkgreen: '#006400',
+        darkorange3: '#cd6600', darkseagreen1: '#c1ffc1', deepskyblue: '#00bfff',
+        firebrick4: '#8b1a1a', gold: '#ffd700', goldenrod4: '#8b6914',
+        gray20: '#333333', gray45: '#737373', gray50: '#7f7f7f', gray55: '#8c8c8c',
+        gray65: '#a6a6a6', gray75: '#bfbfbf', gray85: '#d9d9d9', gray92: '#ebebeb',
+        indianred1: '#ff6a6a', khaki: '#f0e68c', lightblue: '#add8e6',
+        lightskyblue: '#87cefa', mediumpurple1: '#ab82ff', navajowhite: '#ffdead',
+        navy: '#000080', orangered3: '#cd3700', purple: '#a020f0', red2: '#ee0000',
+        royalblue: '#4169e1', salmon: '#fa8072', sienna1: '#ff8247',
+        skyblue: '#87ceeb', violetred1: '#ff3e96', white: '#ffffff',
+    },
+
+    // Translate a Graphviz colour token to a browser-safe colour: pass through
+    // hex (#rrggbb) and CSS names, map known X11 names, fall back to the input.
+    gvColor(name) {
+        if (name === undefined || name === null) return null;
+        const raw = String(name).trim();
+        if (!raw) return null;
+        if (raw.charAt(0) === '#') return raw;
+        return this.gvColors[raw.toLowerCase()] || raw;
+    },
+
     htmlLabelToCanvasText(value) {
         const superscriptChars = {
             '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
@@ -256,6 +303,15 @@ const GraphManager = {
     getNodeFillColor(ele) {
         if (this.hasStatusOne(ele)) return this.statusOneNodeColor;
 
+        // The truth-graph dumper encodes detector region / role in the node fillcolor
+        // (navajowhite=calo, darkseagreen1=tracker, lightskyblue=muon, gold=seed,
+        // aliceblue=GEN-only, ... vertices by role). X11/SVG colour names are
+        // understood directly by the browser, so honour them for logical graphs.
+        if (this.isLogicalGraph()) {
+            const producerFill = this.gvColor(ele.data('fillcolor'));
+            if (producerFill) return producerFill;
+        }
+
         const type = this.getNodeKind(ele);
         if (type.startsWith('GenSim')) return this.nodeTypeColors.genSim;
         if (type === 'GenEvent') return this.nodeTypeColors.event;
@@ -268,8 +324,20 @@ const GraphManager = {
         return '#3498db';
     },
 
+    isSeedNode(ele) {
+        return String(ele.data('shape') || '').trim().toLowerCase() === 'doublecircle';
+    },
+
     getNodeShape(ele) {
         if (this.hasStatusOne(ele)) return 'rectangle';
+
+        // Honour the producer's shape encoding (seed/muon/vertex kinds) when we can
+        // map it; fall back to the kind-based shapes for graphs that do not set it.
+        if (this.isLogicalGraph()) {
+            const gvShape = String(ele.data('shape') || '').trim().toLowerCase();
+            const mapped = this.gvShapeToCytoscape[gvShape];
+            if (mapped) return mapped;
+        }
 
         const type = this.getNodeKind(ele);
         if (type === 'GenEvent') return 'star';
@@ -308,14 +376,22 @@ const GraphManager = {
 
     getNodeBorderColor(ele) {
         if (this.hasCrossedBoundary(ele)) return '#e804ec';
-        if (this.isLogicalGraph()) return '#34495e';
 
-        const color = ele.data('color');
+        // Honour the producer's border colour (the dumper outlines seeds in gold,
+        // muons in navy, vertices by role); fall back to the default slate.
+        const color = this.gvColor(ele.data('color'));
         return color || '#34495e';
     },
 
     getNodeBorderWidth(ele) {
-        return this.hasCrossedBoundary(ele) ? 3 : 1;
+        if (this.hasCrossedBoundary(ele)) return 3;
+
+        // Honour the producer's penwidth so seeds (penwidth 3) and muons stand out.
+        const penwidth = Number.parseFloat(ele.data('penwidth'));
+        if (Number.isFinite(penwidth) && penwidth > 0) {
+            return Math.min(6, Math.max(1, penwidth));
+        }
+        return 1;
     },
 
     /**
@@ -392,7 +468,10 @@ const GraphManager = {
                             return GraphManager.getNodeSize(ele);
                         },
                         'border-style': function(ele) {
-                            return GraphManager.hasCrossedBoundary(ele) ? 'double' : 'solid';
+                            if (GraphManager.hasCrossedBoundary(ele)) return 'double';
+                            // Evoke the producer's doublecircle seed marker.
+                            if (GraphManager.isSeedNode(ele)) return 'double';
+                            return 'solid';
                         }
                     }
                 },
@@ -456,14 +535,25 @@ const GraphManager = {
                 {
                     selector: 'edge',
                     style: {
-                        'width': 1,
+                        // Honour the producer's edge width: the dumper encodes
+                        // provenance as red2/penwidth 2.4 (signal), blue/1.3
+                        // (underlying event), gray20/dashed/0.8 (the rest).
+                        'width': function(ele) {
+                            const penwidth = Number.parseFloat(ele.data('penwidth'));
+                            return Number.isFinite(penwidth) && penwidth > 0
+                                ? Math.min(6, Math.max(0.8, penwidth))
+                                : 1;
+                        },
+                        'line-style': function(ele) {
+                            return String(ele.data('style') || '').toLowerCase().includes('dashed')
+                                ? 'dashed'
+                                : 'solid';
+                        },
                         'line-color': function(ele) {
-                            const color = ele.data('color');
-                            return color || '#95a5a6';
+                            return GraphManager.gvColor(ele.data('color')) || '#95a5a6';
                         },
                         'target-arrow-color': function(ele) {
-                            const color = ele.data('color');
-                            return color || '#95a5a6';
+                            return GraphManager.gvColor(ele.data('color')) || '#95a5a6';
                         },
                         'target-arrow-shape': 'triangle',
                         'curve-style': 'bezier',
