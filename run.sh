@@ -91,14 +91,15 @@ echo ""
 echo "Using DOT file: $DOT_FILE_ABS"
 echo ""
 
-# The app needs Python 3.9 or newer, and server.py imports cgi, which Python
-# 3.13 removed. The system python3 can be outside that range.
+# The app needs Python 3.9 or newer. The system python3 can be older.
+PYTHON_CANDIDATES="python3 python3.14 python3.13 python3.12 python3.11 python3.10 python3.9"
+
 select_python() {
     local candidate
-    for candidate in "${TRUTHVIZ_PYTHON:-}" python3.12 python3.11 python3.10 python3.9 python3; do
+    for candidate in "${TRUTHVIZ_PYTHON:-}" $PYTHON_CANDIDATES; do
         [ -n "$candidate" ] || continue
         command -v "$candidate" >/dev/null 2>&1 || continue
-        if "$candidate" -c 'import sys; sys.exit(0 if (3, 9) <= sys.version_info < (3, 13) else 1)' 2>/dev/null; then
+        if "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
             echo "$candidate"
             return 0
         fi
@@ -106,11 +107,24 @@ select_python() {
     return 1
 }
 
+report_python_candidates() {
+    local candidate version
+    for candidate in $PYTHON_CANDIDATES; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            version="$("$candidate" -V 2>&1)"
+            echo "  $candidate: $version"
+        fi
+    done
+}
+
 # Check if virtual environment exists
 if [ ! -d "venv" ]; then
     if ! PYTHON_BIN="$(select_python)"; then
-        echo "Error: no python3 in the range 3.9 to 3.12 was found."
-        echo "Set TRUTHVIZ_PYTHON to a suitable interpreter."
+        echo "Error: no python3 of version 3.9 or newer was found."
+        echo "Interpreters on this machine:"
+        report_python_candidates
+        echo "Install one, for example 'sudo apt install python3-venv', or set"
+        echo "TRUTHVIZ_PYTHON to a suitable interpreter."
         exit 1
     fi
     echo "Creating virtual environment with $PYTHON_BIN..."

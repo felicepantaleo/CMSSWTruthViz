@@ -4,9 +4,8 @@ This repository is a Python-assisted static web app. The frontend has no npm bui
 
 ## Requirements
 
-- Python 3.9 or newer, and older than 3.13. `server.py` imports the `cgi` module,
-  which Python 3.13 removed.
-- Python `venv` support.
+- Python 3.9 or newer. Verified on 3.12 and on 3.13.
+- Python `venv` support. On Debian and Ubuntu this is the `python3-venv` package.
 - A modern browser such as Chrome or Firefox.
 - Network access from the browser for CDN libraries unless those scripts are vendored locally.
 - A Graphviz DOT truth graph, usually `truthgraph.dot`.
