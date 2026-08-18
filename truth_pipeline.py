@@ -24,7 +24,7 @@ from urllib.request import urlretrieve
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-DEFAULT_CMSSW_RELEASE = "CMSSW_20_1_X_2026-06-20-1100"
+DEFAULT_CMSSW_RELEASE = os.environ.get("TRUTHVIZ_CMSSW_RELEASE", "CMSSW_20_1_0_pre2")
 DEFAULT_CMSSW_SRC = PROJECT_ROOT.parent / DEFAULT_CMSSW_RELEASE / "src"
 
 
@@ -122,16 +122,16 @@ def cmsrun_command(cmssw_src: Path, cfg_path: Path, input_root: Path, outdir: Pa
     if ":" not in input_arg:
         input_arg = f"file:{input_arg}"
 
+    # The dumper config has no skip option, so it reads the file from the start
+    # and writes one DOT pair per event. The requested event is the last one.
     args = [
         "cmsRun",
         str(cfg_path),
         input_arg,
         "-n",
-        "1",
+        str(options.event_index + 1),
         "-o",
         str(outdir),
-        "--skipEvents",
-        str(options.event_index),
     ]
     args.extend(options.dumper_args)
 
@@ -233,7 +233,7 @@ def process_cmssw_root(input_root: Path, options: PipelineOptions | None = None,
             str(rechits_root_path),
             str(rechits_json_path),
             "--event-index",
-            "0",
+            str(options.event_index),
             "--no-js-output",
         ],
         cwd=PROJECT_ROOT,
@@ -272,7 +272,7 @@ def process_cmssw_root(input_root: Path, options: PipelineOptions | None = None,
                 str(rechits_root_path),
                 str(viewer_rechits_path),
                 "--event-index",
-                "0",
+                str(options.event_index),
                 "--js-output",
                 str(viewer_rechits_js_path),
             ],

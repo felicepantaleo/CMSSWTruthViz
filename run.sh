@@ -91,10 +91,30 @@ echo ""
 echo "Using DOT file: $DOT_FILE_ABS"
 echo ""
 
+# The app needs Python 3.9 or newer, and server.py imports cgi, which Python
+# 3.13 removed. The system python3 can be outside that range.
+select_python() {
+    local candidate
+    for candidate in "${TRUTHVIZ_PYTHON:-}" python3.12 python3.11 python3.10 python3.9 python3; do
+        [ -n "$candidate" ] || continue
+        command -v "$candidate" >/dev/null 2>&1 || continue
+        if "$candidate" -c 'import sys; sys.exit(0 if (3, 9) <= sys.version_info < (3, 13) else 1)' 2>/dev/null; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Check if virtual environment exists
 if [ ! -d "venv" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv venv
+    if ! PYTHON_BIN="$(select_python)"; then
+        echo "Error: no python3 in the range 3.9 to 3.12 was found."
+        echo "Set TRUTHVIZ_PYTHON to a suitable interpreter."
+        exit 1
+    fi
+    echo "Creating virtual environment with $PYTHON_BIN..."
+    "$PYTHON_BIN" -m venv venv
     echo "✓ Virtual environment created"
     echo ""
 fi
