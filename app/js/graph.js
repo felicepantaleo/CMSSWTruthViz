@@ -27,6 +27,47 @@ const GraphManager = {
         genSim: '#2ecc71',
         event: '#c79f00'
     },
+
+    // The logical truth graph is standalone: a node is described by its own truth
+    // level, its hit footprint and its role, not by GEN or SIM provenance.
+    // Fill colour carries the dominant truth level, most signal-like first.
+    truthLevelColors: {
+        hardProcess: '#bd1f01',
+        partonJets: '#e76300',
+        reconstructableFromSignal: '#832db6',
+        stableLegsFromUpstream: '#3f90da',
+        stableDecayProducts: '#92dadd',
+        caloBoundary: '#b9ac70',
+        underlyingEvent: '#94a4a2',
+        none: '#e8e8e8'
+    },
+    truthLevelDarkFills: new Set([
+        '#bd1f01', '#e76300', '#832db6', '#3f90da', '#a96b59'
+    ]),
+    truthVertexColor: '#d9d9d9',
+    truthArtificialColors: {
+        interaction: '#ffa90e',
+        upstream: '#a96b59',
+        underlyingEvent: '#94a4a2'
+    },
+    truthArtificialShapes: {
+        interaction: 'star',
+        upstream: 'pentagon',
+        underlyingEvent: 'round-rectangle'
+    },
+    // Border width carries the hit footprint. No hits is drawn dashed.
+    truthFootprintBorderWidths: {
+        caloRec: 5,
+        caloSim: 3,
+        tracker: 2,
+        none: 1
+    },
+    truthMarkerColors: {
+        backscattered: '#e76300',
+        checkpoints: '#009988',
+        plain: '#34495e'
+    },
+    truthArtificialNodeSize: 64,
     defaultNodeSize: 58,
     vertexNodeSize: 30,
     eventNodeSize: 88,
@@ -149,6 +190,42 @@ const GraphManager = {
 
     isLogicalGraph() {
         return this.graphName === 'TruthLogicalGraph';
+    },
+
+    // A node carries a truth classification when the preprocessing recognised the
+    // logical graph. Graphs without it keep the legacy GEN/SIM styling.
+    truthKind(ele) {
+        return String(ele.data('truthKind') || '').trim();
+    },
+
+    hasTruthClassification(ele) {
+        return this.truthKind(ele) !== '';
+    },
+
+    truthLevel(ele) {
+        const level = String(ele.data('truthLevel') || '').trim();
+        return level || 'none';
+    },
+
+    truthFootprint(ele) {
+        return String(ele.data('truthFootprint') || 'none').trim();
+    },
+
+    truthRole(ele) {
+        return String(ele.data('truthRole') || '').trim();
+    },
+
+    isTruthRoot(ele) {
+        return String(ele.data('isRoot') || '').trim() === '1';
+    },
+
+    isBackscattered(ele) {
+        return String(ele.data('backscattered') || '').trim() === '1';
+    },
+
+    hasCheckpoints(ele) {
+        const count = Number.parseInt(ele.data('nCheckpoints'), 10);
+        return Number.isFinite(count) && count > 0;
     },
 
     isTruthyAttribute(value) {
@@ -300,7 +377,23 @@ const GraphManager = {
         return String(ele.data('status')).trim() === '1';
     },
 
+    getTruthFillColor(ele) {
+        const kind = this.truthKind(ele);
+        if (kind === 'artificial') {
+            return this.truthArtificialColors[this.truthRole(ele)] || this.truthArtificialColors.interaction;
+        }
+        if (kind === 'vertex') return this.truthVertexColor;
+        return this.truthLevelColors[this.truthLevel(ele)] || this.truthLevelColors.none;
+    },
+
+    getNodeTextColor(ele) {
+        if (!this.hasTruthClassification(ele)) return '#000';
+        return this.truthLevelDarkFills.has(this.getTruthFillColor(ele)) ? '#fff' : '#000';
+    },
+
     getNodeFillColor(ele) {
+        if (this.hasTruthClassification(ele)) return this.getTruthFillColor(ele);
+
         if (this.hasStatusOne(ele)) return this.statusOneNodeColor;
 
         // The truth-graph dumper encodes detector region / role in the node fillcolor
@@ -329,6 +422,13 @@ const GraphManager = {
     },
 
     getNodeShape(ele) {
+        const truthKind = this.truthKind(ele);
+        if (truthKind === 'artificial') {
+            return this.truthArtificialShapes[this.truthRole(ele)] || 'star';
+        }
+        if (truthKind === 'vertex') return 'diamond';
+        if (truthKind === 'particle') return 'ellipse';
+
         if (this.hasStatusOne(ele)) return 'rectangle';
 
         // Honour the producer's shape encoding (seed/muon/vertex kinds) when we can
@@ -353,6 +453,15 @@ const GraphManager = {
     },
 
     getNodeSize(ele) {
+        const truthKind = this.truthKind(ele);
+        if (truthKind === 'artificial') return this.truthArtificialNodeSize;
+        if (truthKind === 'vertex') return this.vertexNodeSize;
+        if (truthKind === 'particle') {
+            const particleId = this.getParticlePdgId(ele);
+            const scale = this.smallParticlePdgIds.has(particleId) ? 0.7 : 1;
+            return this.defaultNodeSize * scale;
+        }
+
         const type = this.getNodeKind(ele);
         if (type === 'GenEvent') return this.eventNodeSize;
         if (type === 'GenVertex' || type === 'SimVertex' || type === 'GenSimVertex' || type === 'LogicalVertex') return this.vertexNodeSize;
@@ -367,6 +476,11 @@ const GraphManager = {
     },
 
     getNodeFontSize(ele) {
+        const truthKind = this.truthKind(ele);
+        if (truthKind === 'artificial') return 11;
+        if (truthKind === 'vertex') return 8;
+        if (truthKind === 'particle') return 16;
+
         const type = this.getNodeKind(ele);
         if (type === 'GenVertex' || type === 'SimVertex' || type === 'GenSimVertex' || type === 'LogicalVertex' || this.isLogicalVertex(ele)) {
             return 10;
@@ -375,6 +489,12 @@ const GraphManager = {
     },
 
     getNodeBorderColor(ele) {
+        if (this.hasTruthClassification(ele)) {
+            if (this.isBackscattered(ele)) return this.truthMarkerColors.backscattered;
+            if (this.hasCheckpoints(ele)) return this.truthMarkerColors.checkpoints;
+            return this.truthMarkerColors.plain;
+        }
+
         if (this.hasCrossedBoundary(ele)) return '#e804ec';
 
         // Honour the producer's border colour (the dumper outlines seeds in gold,
@@ -384,6 +504,11 @@ const GraphManager = {
     },
 
     getNodeBorderWidth(ele) {
+        if (this.hasTruthClassification(ele)) {
+            if (this.truthKind(ele) !== 'particle') return 1;
+            return this.truthFootprintBorderWidths[this.truthFootprint(ele)] ?? 1;
+        }
+
         if (this.hasCrossedBoundary(ele)) return 3;
 
         // Honour the producer's penwidth so seeds (penwidth 3) and muons stand out.
@@ -400,6 +525,7 @@ const GraphManager = {
     init(data) {
         console.log('Initializing graph with', data.nodes.length, 'nodes and', data.edges.length, 'edges');
         this.graphName = data.metadata?.graph_name || data.graph_name || '';
+        this.updateLegend();
         this.registerLayoutExtensions();
 
         // Convert data to Cytoscape format
@@ -444,8 +570,10 @@ const GraphManager = {
                             const size = GraphManager.getNodeSize(ele);
                             return Number.isFinite(size) ? Math.max(22, size - 4) : 80;
                         },
-                        'line-height': 1,
-                        'color': '#000',
+                        'line-height': 1.1,
+                        'color': function(ele) {
+                            return GraphManager.getNodeTextColor(ele);
+                        },
                         'text-background-opacity': 0,
                         'text-background-padding': 0,
                         'text-background-shape': 'roundrectangle',
@@ -468,6 +596,12 @@ const GraphManager = {
                             return GraphManager.getNodeSize(ele);
                         },
                         'border-style': function(ele) {
+                            if (GraphManager.hasTruthClassification(ele)) {
+                                if (GraphManager.isTruthRoot(ele)) return 'double';
+                                if (GraphManager.truthKind(ele) === 'particle'
+                                    && GraphManager.truthFootprint(ele) === 'none') return 'dashed';
+                                return 'solid';
+                            }
                             if (GraphManager.hasCrossedBoundary(ele)) return 'double';
                             // Evoke the producer's doublecircle seed marker.
                             if (GraphManager.isSeedNode(ele)) return 'double';
@@ -827,19 +961,24 @@ const GraphManager = {
             this.cy.container().style.cursor = '';
         });
 
-        // Node hover - show tooltip
+        // Node hover - expand the two-line label into the full summary
         this.cy.on('mouseover', 'node', (evt) => {
             const node = evt.target;
-            const tooltip = node.data('tooltip');
-            if (tooltip) {
-                node.style('text-background-color', 'rgba(255, 255, 255, 0.9)');
-            }
+            node.style('text-background-color', 'rgba(255, 255, 255, 0.9)');
+            this.showNodeTooltip(node, evt.renderedPosition);
+        });
+
+        this.cy.on('mousemove', 'node', (evt) => {
+            this.moveNodeTooltip(evt.renderedPosition);
         });
 
         this.cy.on('mouseout', 'node', (evt) => {
             const node = evt.target;
             node.style('text-background-color', 'rgba(255, 255, 255, 0.7)');
+            this.hideNodeTooltip();
         });
+
+        this.cy.on('pan zoom', () => this.hideNodeTooltip());
 
         // Background click - clear selection
         this.cy.on('tap', (evt) => {
@@ -847,6 +986,72 @@ const GraphManager = {
                 this.clearSelection();
             }
         });
+    },
+
+    /**
+     * Show the legend that matches the loaded graph. The logical truth graph is
+     * standalone, so its legend replaces the GEN/SIM one rather than adding to it.
+     */
+    updateLegend() {
+        const truthLegend = document.getElementById('legend-truth');
+        const genSimLegend = document.getElementById('legend-gensim');
+        if (!truthLegend || !genSimLegend) return;
+
+        const isTruth = this.isLogicalGraph();
+        truthLegend.classList.toggle('hidden', !isTruth);
+        genSimLegend.classList.toggle('hidden', isTruth);
+
+        // The GEN/SIM view options have no meaning in the standalone truth graph.
+        document.querySelectorAll('.gensim-only').forEach((element) => {
+            element.classList.toggle('hidden', isTruth);
+        });
+    },
+
+    /**
+     * Return the element that carries the hover summary, creating it on first use.
+     */
+    nodeTooltipElement() {
+        if (!this._nodeTooltip) {
+            const element = document.createElement('div');
+            element.id = 'node-tooltip';
+            element.className = 'hidden';
+            document.body.appendChild(element);
+            this._nodeTooltip = element;
+        }
+        return this._nodeTooltip;
+    },
+
+    /**
+     * Show the full node summary next to the cursor. The canvas label stays at
+     * two lines, so the rest of the truth information appears only on hover.
+     */
+    showNodeTooltip(node, renderedPosition) {
+        const text = node.data('truthHover') || node.data('tooltip') || node.data('detailLabel');
+        if (!text) return;
+
+        const element = this.nodeTooltipElement();
+        element.textContent = text;
+        element.classList.remove('hidden');
+        this.moveNodeTooltip(renderedPosition);
+    },
+
+    moveNodeTooltip(renderedPosition) {
+        if (!this._nodeTooltip || this._nodeTooltip.classList.contains('hidden')) return;
+        if (!renderedPosition) return;
+
+        const container = this.cy.container().getBoundingClientRect();
+        const element = this._nodeTooltip;
+        const left = container.left + renderedPosition.x + 16;
+        const top = container.top + renderedPosition.y + 16;
+        const maxLeft = window.innerWidth - element.offsetWidth - 8;
+        const maxTop = window.innerHeight - element.offsetHeight - 8;
+
+        element.style.left = `${Math.max(8, Math.min(left, maxLeft))}px`;
+        element.style.top = `${Math.max(8, Math.min(top, maxTop))}px`;
+    },
+
+    hideNodeTooltip() {
+        if (this._nodeTooltip) this._nodeTooltip.classList.add('hidden');
     },
 
     /**

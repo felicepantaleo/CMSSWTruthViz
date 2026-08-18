@@ -48,7 +48,36 @@ The original bundle stays available as `window.bundleData`. View state is repres
 
 ## Node Semantics
 
-The frontend contains truth-graph-specific inference for:
+The viewer draws two different graphs and shows a different legend for each. The
+graph name in the bundle metadata selects which one.
+
+### TruthLogicalGraph
+
+The logical truth graph is standalone, so a node is described by its own truth
+level, its hit footprint and its role. GEN and SIM provenance is not used.
+`preprocess/parse_graph.py` stamps `truthKind`, `truthLevel`, `truthLevels`,
+`truthFootprint`, `truthRole`, `truthTitle`, `truthSubtitle` and `truthHover` on
+each node, and the frontend maps them onto the canvas:
+
+- Shape carries the node kind: ellipse for a particle, diamond for a vertex, and
+  star, pentagon or rounded rectangle for the three artificial vertices the
+  post-processor adds (`domain=Internal`, `role=interaction`, `ISR/upstream`,
+  `underlying event`).
+- Fill carries the dominant truth level, most signal-like first: `hardProcess`,
+  `partonJets`, `reconstructableFromSignal`, `stableLegsFromUpstream`,
+  `stableDecayProducts`, `caloBoundary`, `underlyingEvent`. A particle usually
+  carries several levels; the hover summary lists them all.
+- Border width carries the hit footprint: calo rec hits, calo sim hits only,
+  tracker or MTD or muon only, and no hits, which is drawn dashed.
+- Border style and colour carry the markers: a double ring for the root of a
+  selected branch, teal for checkpoints, orange for a backscattered particle.
+- The label holds two lines, the particle name or PDG id with its energy, or the
+  vertex reason with its outgoing count. Hovering a node opens the full summary.
+
+### TruthGraph
+
+The raw gen plus sim graph keeps the earlier inference, because GEN and SIM
+provenance is still its subject:
 
 - `GenEvent`
 - `GenVertex`
