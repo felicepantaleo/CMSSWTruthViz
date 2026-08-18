@@ -29,7 +29,9 @@ data/bundle.json
 data/.bundle.source
 data/cmssw/
 data/jobs/
+data/rechits.json
 app/js/bundle.js
+app/js/rechits.js
 
 # IDE
 .vscode/
