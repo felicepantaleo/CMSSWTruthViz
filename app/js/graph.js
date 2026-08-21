@@ -1390,9 +1390,50 @@ const GraphManager = {
             return;
         }
 
+        hiddenNodes = this.withDanglingVerticesHidden(hiddenNodes);
+
         hiddenNodes.addClass('parton-shower-filtered');
         hiddenNodes.connectedEdges().addClass('parton-shower-filtered');
         this.addPartonShowerBypassEdges(hiddenNodes);
+    },
+
+    /**
+     * Add to the hidden set every vertex that filtering has left dangling, and
+     * repeat until nothing more dangles, because hiding one vertex can strand the
+     * next. A vertex dangles when it once had parents and no visible node is
+     * reachable upstream of it, or it once had children and none is reachable
+     * downstream. Reachability is judged through the hidden nodes, the same walk
+     * the bypass edges follow, so a vertex whose daughters are hidden but whose
+     * grand-daughters are visible stays: the bypass reconnects it.
+     *
+     * The test is against what the node originally had, so a true source or sink
+     * of the graph is never removed and an unfiltered graph is left untouched.
+     */
+    withDanglingVerticesHidden(hiddenNodes) {
+        let hidden = hiddenNodes;
+        let hiddenIds = new Set(hidden.map(node => node.id()));
+
+        for (let pass = 0; pass < 100; pass++) {
+            const dangling = this.cy.nodes().filter((node) => {
+                if (hiddenIds.has(node.id())) return false;
+                const kind = this.truthKind(node);
+                if (kind !== 'vertex' && kind !== 'artificial') return false;
+
+                const hadParents = node.incomers('node').length > 0;
+                const hadChildren = node.outgoers('node').length > 0;
+
+                if (hadParents && this.getVisibleBoundaryNodes(node, 'in', hiddenIds).length === 0) return true;
+                if (hadChildren && this.getVisibleBoundaryNodes(node, 'out', hiddenIds).length === 0) return true;
+                return false;
+            });
+
+            if (dangling.length === 0) break;
+
+            hidden = hidden.union(dangling);
+            hiddenIds = new Set(hidden.map(node => node.id()));
+        }
+
+        return hidden;
     },
 
     hasActiveTruthFilter() {

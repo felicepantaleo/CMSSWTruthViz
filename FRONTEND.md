@@ -100,6 +100,16 @@ of that set to its visible children. Running the filters as separate passes woul
 let each bridge only around its own hidden nodes, which strands a node whose
 neighbours another filter hid.
 
+A vertex that filtering leaves dangling is hidden too, and the sweep repeats until
+nothing more dangles, because hiding one vertex can strand the next. A vertex
+dangles when it once had parents and no visible node is reachable upstream of it, or
+it once had children and none is reachable downstream. Reachability follows the same
+walk through hidden nodes that the bypass edges take, so a vertex whose daughters are
+hidden but whose grand-daughters are visible stays, reconnected by a bypass. The test
+is against what the node originally had, so a true source or sink of the graph is
+never removed and an unfiltered graph is left untouched. Hiding every level therefore
+empties the canvas: with no particle visible, no vertex has anything to join.
+
 ### TruthGraph
 
 The raw gen plus sim graph keeps the earlier inference, because GEN and SIM
