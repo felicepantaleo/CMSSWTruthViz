@@ -77,7 +77,28 @@ each node, and the frontend maps them onto the canvas:
   full summary, which carries the incoming and outgoing counts.
 
 The legend collapses to its title bar, and it scrolls inside the graph container
-rather than growing under the controls bar.
+rather than growing under the controls bar. Its truth-level list is generated from
+the same vocabulary as the level filter, so the two cannot drift apart.
+
+### Truth filters
+
+Four filters apply to the logical graph, in the view options:
+
+- Hide pile-up. Signal is bunch crossing 0 and event 0, which the producer encodes
+  as an eventId of 0, so any other value is pile-up. This mirrors
+  `truth::Branch::isFromPileup()`.
+- Hide underlying event. Drops particles carrying the `underlyingEvent` level and
+  the artificial underlying-event vertex.
+- Hide particles below an energy threshold in GeV.
+- Levels shown. One entry per truth level plus one for a particle with no level. A
+  particle is judged on its dominant level, the same one that gives it its colour,
+  so the list is a partition rather than an overlapping set of tags.
+
+Hiding always collapses. Every collapsing filter, including the older parton-shower
+one, contributes to a single hidden set, and one pass then joins the visible parents
+of that set to its visible children. Running the filters as separate passes would
+let each bridge only around its own hidden nodes, which strands a node whose
+neighbours another filter hid.
 
 ### TruthGraph
 

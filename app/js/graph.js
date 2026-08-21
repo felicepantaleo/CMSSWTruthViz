@@ -19,6 +19,12 @@ const GraphManager = {
     hideGenEventNodes: true,
     hideSimVertexKey0Node: true,
     hidePartonShower: false,
+    // Truth filters. Every one of them collapses: a hidden node's visible parents
+    // are joined to its visible children, so nothing is ever orphaned.
+    hidePileup: false,
+    hideUnderlyingEvent: false,
+    energyThresholdGeV: 0,
+    hiddenTruthLevels: new Set(),
     hideSmallDisconnectedSubgraphs: true,
     smallDisconnectedSubgraphNodeLimit: 10,
     nodeTypeColors: {
@@ -31,10 +37,36 @@ const GraphManager = {
     // The logical truth graph is standalone: a node is described by its own truth
     // level, its hit footprint and its role, not by GEN or SIM provenance.
     // Fill colour carries the dominant truth level, most signal-like first.
+    // Same order as TRUTH_LEVEL_ORDER in preprocess/parse_graph.py, most
+    // signal-like first. This is the only place the precedence is written down.
+    truthLevelOrder: [
+        'hardProcess', 'partonJets', 'bHadrons', 'cHadrons', 'visibleTau',
+        'reconstructableFromSignal', 'reconstructableFinalState',
+        'stableLegsFromUpstream', 'stableDecayProducts', 'caloBoundary',
+        'underlyingEvent'
+    ],
+    truthLevelLabels: {
+        hardProcess: 'hard process',
+        partonJets: 'parton jet',
+        bHadrons: 'b hadron',
+        cHadrons: 'c hadron',
+        visibleTau: 'visible tau',
+        reconstructableFromSignal: 'reconstructable from signal',
+        reconstructableFinalState: 'reconstructable final state',
+        stableLegsFromUpstream: 'stable leg from upstream',
+        stableDecayProducts: 'stable decay product',
+        caloBoundary: 'calo boundary',
+        underlyingEvent: 'underlying event',
+        none: 'no level'
+    },
     truthLevelColors: {
         hardProcess: '#bd1f01',
         partonJets: '#e76300',
+        bHadrons: '#a96b59',
+        cHadrons: '#d0a190',
+        visibleTau: '#717581',
         reconstructableFromSignal: '#832db6',
+        reconstructableFinalState: '#c3a3e0',
         stableLegsFromUpstream: '#3f90da',
         stableDecayProducts: '#92dadd',
         caloBoundary: '#b9ac70',
@@ -42,7 +74,7 @@ const GraphManager = {
         none: '#e8e8e8'
     },
     truthLevelDarkFills: new Set([
-        '#bd1f01', '#e76300', '#832db6', '#3f90da', '#a96b59'
+        '#bd1f01', '#e76300', '#832db6', '#3f90da', '#a96b59', '#717581'
     ]),
     truthVertexColor: '#d9d9d9',
     truthArtificialColors: {
@@ -1016,9 +1048,13 @@ const GraphManager = {
         truthLegend.classList.toggle('hidden', !isTruth);
         genSimLegend.classList.toggle('hidden', isTruth);
 
-        // The GEN/SIM view options have no meaning in the standalone truth graph.
+        // The GEN/SIM view options have no meaning in the standalone truth graph,
+        // and the truth filters have none in the raw one.
         document.querySelectorAll('.gensim-only').forEach((element) => {
             element.classList.toggle('hidden', isTruth);
+        });
+        document.querySelectorAll('.truth-only').forEach((element) => {
+            element.classList.toggle('hidden', !isTruth);
         });
     },
 
@@ -1083,8 +1119,96 @@ const GraphManager = {
         });
     },
 
+    /**
+     * Build the level check list and wire every truth filter control.
+     */
+    setupTruthFilters() {
+        const pileup = document.getElementById('hide-pileup-checkbox');
+        if (pileup) {
+            pileup.checked = this.hidePileup;
+            pileup.addEventListener('change', () => this.setHidePileup(pileup.checked));
+        }
+
+        const underlyingEvent = document.getElementById('hide-underlying-event-checkbox');
+        if (underlyingEvent) {
+            underlyingEvent.checked = this.hideUnderlyingEvent;
+            underlyingEvent.addEventListener('change', () => this.setHideUnderlyingEvent(underlyingEvent.checked));
+        }
+
+        const threshold = document.getElementById('energy-threshold-input');
+        if (threshold) {
+            threshold.value = String(this.energyThresholdGeV);
+            threshold.addEventListener('change', () => this.setEnergyThreshold(threshold.value));
+        }
+
+        const items = document.getElementById('level-filter-items');
+        if (!items) return;
+
+        items.innerHTML = '';
+        const levels = [...this.truthLevelOrder, 'none'];
+        levels.forEach((level) => {
+            const label = document.createElement('label');
+            label.className = 'checkbox-label level-filter-item';
+
+            const box = document.createElement('input');
+            box.type = 'checkbox';
+            box.checked = !this.hiddenTruthLevels.has(level);
+            box.dataset.level = level;
+            box.addEventListener('change', () => this.setTruthLevelVisible(level, box.checked));
+
+            const swatch = document.createElement('span');
+            swatch.className = 'level-filter-swatch';
+            swatch.style.background = this.truthLevelColors[level] || this.truthLevelColors.none;
+
+            label.appendChild(box);
+            label.appendChild(swatch);
+            label.appendChild(document.createTextNode(this.truthLevelLabels[level] || level));
+            items.appendChild(label);
+        });
+
+        const setAll = (visible) => {
+            items.querySelectorAll('input[type="checkbox"]').forEach((box) => { box.checked = visible; });
+            this.hiddenTruthLevels = visible ? new Set() : new Set(levels);
+            this.applyCollapsingFilters();
+            this.relayoutVisible();
+        };
+
+        const allButton = document.getElementById('level-filter-all');
+        if (allButton) allButton.addEventListener('click', () => setAll(true));
+        const noneButton = document.getElementById('level-filter-none');
+        if (noneButton) noneButton.addEventListener('click', () => setAll(false));
+    },
+
+    /**
+     * Fill the truth-level legend from the same vocabulary the filters use, so the
+     * two can never drift apart.
+     */
+    buildLevelLegend() {
+        const container = document.getElementById('legend-levels');
+        if (!container) return;
+
+        container.innerHTML = '';
+        [...this.truthLevelOrder, 'none'].forEach((level) => {
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+
+            const swatch = document.createElement('div');
+            swatch.className = 'legend-color';
+            swatch.style.background = this.truthLevelColors[level] || this.truthLevelColors.none;
+
+            const text = document.createElement('span');
+            text.textContent = this.truthLevelLabels[level] || level;
+
+            item.appendChild(swatch);
+            item.appendChild(text);
+            container.appendChild(item);
+        });
+    },
+
     setupViewOptions() {
         this.setupLegendToggle();
+        this.buildLevelLegend();
+        this.setupTruthFilters();
         const hideGenEventCheckbox = document.getElementById('hide-gen-event-checkbox');
         if (hideGenEventCheckbox) {
             hideGenEventCheckbox.checked = this.hideGenEventNodes;
@@ -1235,21 +1359,110 @@ const GraphManager = {
     },
 
     applyPartonShowerFilter() {
+        this.applyCollapsingFilters();
+    },
+
+    /**
+     * Hide every node that a collapsing filter rejects, then join the visible
+     * parents of the hidden set to its visible children. All collapsing filters
+     * share one pass: run separately, each would bridge only around its own
+     * hidden nodes and could strand a node whose neighbours another filter hid.
+     */
+    applyCollapsingFilters() {
         this.cy.edges('[isPartonShowerBypass]').remove();
         this.cy.nodes().removeClass('parton-shower-filtered');
         this.cy.edges().removeClass('parton-shower-filtered');
 
-        if (!this.hidePartonShower) {
-            return;
+        let hiddenNodes = this.cy.collection();
+
+        if (this.hidePartonShower) {
+            const partonShowerNodes = this.cy.nodes().filter(node => this.isPartonShowerNode(node));
+            hiddenNodes = hiddenNodes
+                .union(partonShowerNodes)
+                .union(this.getSingleChildParentVertices(partonShowerNodes));
         }
 
-        const partonShowerNodes = this.cy.nodes().filter(node => this.isPartonShowerNode(node));
-        const parentVertices = this.getSingleChildParentVertices(partonShowerNodes);
-        const hiddenNodes = partonShowerNodes.union(parentVertices);
+        if (this.hasActiveTruthFilter()) {
+            hiddenNodes = hiddenNodes.union(this.cy.nodes().filter(node => this.isTruthFiltered(node)));
+        }
+
+        if (hiddenNodes.length === 0) {
+            return;
+        }
 
         hiddenNodes.addClass('parton-shower-filtered');
         hiddenNodes.connectedEdges().addClass('parton-shower-filtered');
         this.addPartonShowerBypassEdges(hiddenNodes);
+    },
+
+    hasActiveTruthFilter() {
+        return this.hidePileup
+            || this.hideUnderlyingEvent
+            || this.energyThresholdGeV > 0
+            || this.hiddenTruthLevels.size > 0;
+    },
+
+    /**
+     * Report whether a truth filter rejects this node. Vertices are judged only on
+     * provenance, so a vertex is never dropped for an energy or a level that it
+     * does not carry.
+     */
+    isTruthFiltered(node) {
+        if (!this.hasTruthClassification(node)) return false;
+
+        if (this.hidePileup && String(node.data('truthPileup')) === '1') return true;
+
+        const kind = this.truthKind(node);
+        if (this.hideUnderlyingEvent) {
+            if (kind === 'artificial' && this.truthRole(node) === 'underlyingEvent') return true;
+            if (kind === 'particle' && this.truthLevelsOf(node).includes('underlyingEvent')) return true;
+        }
+
+        if (kind !== 'particle') return false;
+
+        if (this.energyThresholdGeV > 0) {
+            const energy = Number.parseFloat(node.data('truthEnergy'));
+            if (Number.isFinite(energy) && energy >= 0 && energy < this.energyThresholdGeV) return true;
+        }
+
+        if (this.hiddenTruthLevels.size > 0 && this.hiddenTruthLevels.has(this.truthLevel(node))) return true;
+
+        return false;
+    },
+
+    truthLevelsOf(node) {
+        const levels = node.data('truthLevels');
+        if (Array.isArray(levels)) return levels;
+        return String(levels || '').split(',').map(part => part.trim()).filter(Boolean);
+    },
+
+    setHidePileup(shouldHide) {
+        this.hidePileup = shouldHide;
+        this.applyCollapsingFilters();
+        this.relayoutVisible();
+    },
+
+    setHideUnderlyingEvent(shouldHide) {
+        this.hideUnderlyingEvent = shouldHide;
+        this.applyCollapsingFilters();
+        this.relayoutVisible();
+    },
+
+    setEnergyThreshold(thresholdGeV) {
+        const value = Number.parseFloat(thresholdGeV);
+        this.energyThresholdGeV = Number.isFinite(value) && value > 0 ? value : 0;
+        this.applyCollapsingFilters();
+        this.relayoutVisible();
+    },
+
+    setTruthLevelVisible(level, visible) {
+        if (visible) {
+            this.hiddenTruthLevels.delete(level);
+        } else {
+            this.hiddenTruthLevels.add(level);
+        }
+        this.applyCollapsingFilters();
+        this.relayoutVisible();
     },
 
     isPartonShowerNode(node) {

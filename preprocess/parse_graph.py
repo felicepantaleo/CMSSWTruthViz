@@ -111,7 +111,11 @@ def vertex_key_from_attrs(node_id, attrs, data_attrs):
 TRUTH_LEVEL_ORDER = (
     "hardProcess",
     "partonJets",
+    "bHadrons",
+    "cHadrons",
+    "visibleTau",
     "reconstructableFromSignal",
+    "reconstructableFinalState",
     "stableLegsFromUpstream",
     "stableDecayProducts",
     "caloBoundary",
@@ -167,6 +171,16 @@ def format_energy(value):
     if energy >= 1:
         return f"{energy:.1f} GeV"
     return f"{energy * 1000:.0f} MeV"
+
+
+def is_pileup(data_attrs):
+    """Return whether the node comes from a pile-up collision.
+
+    The raw eventId encodes the pp collision. The signal interaction is bunch
+    crossing 0 and event 0, which encodes to 0, so any other value is pile-up.
+    """
+    value = parse_number(data_attrs.get("eid"))
+    return bool(value is not None and value != 0)
 
 
 def truth_levels_from_attrs(data_attrs):
@@ -243,6 +257,7 @@ def truth_classification(node_id, attrs):
         return {
             "truthKind": "artificial",
             "truthRole": role,
+            "truthPileup": 1 if is_pileup(data_attrs) else 0,
             "truthTitle": title,
             "truthSubtitle": f"{out_count} out" if out_count else "",
             "truthHover": "\n".join(hover),
@@ -267,6 +282,7 @@ def truth_classification(node_id, attrs):
         return {
             "truthKind": "vertex",
             "truthReason": reason,
+            "truthPileup": 1 if is_pileup(data_attrs) else 0,
             "truthTitle": title,
             "truthSubtitle": f"x4: {x4}" if x4 else f"{out_count} out",
             "truthHover": "\n".join(hover),
@@ -303,11 +319,15 @@ def truth_classification(node_id, attrs):
     if markers:
         hover.append(", ".join(markers))
 
+    energy_value = parse_number(fourth_tuple_value(data_attrs.get("p4")))
+
     return {
         "truthKind": "particle",
         "truthLevel": level or "",
         "truthLevels": levels,
         "truthFootprint": footprint,
+        "truthEnergy": energy_value if energy_value is not None else -1.0,
+        "truthPileup": 1 if is_pileup(data_attrs) else 0,
         "truthTitle": title,
         "truthSubtitle": energy or "",
         "truthHover": "\n".join(hover),
