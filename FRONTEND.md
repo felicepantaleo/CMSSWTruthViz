@@ -95,11 +95,18 @@ Four filters apply to the logical graph, in the view options:
 - Hide underlying event. Drops particles carrying the `underlyingEvent` level and
   the artificial underlying-event vertex.
 - Hide subgraphs with 0 sim hits. Drops a particle whose whole subgraph leaves no
-  sim hit in any channel, so it can never be reconstructed.
+  sim hit in any channel, so it can never be reconstructed. It counts the subgraph,
+  not the particle itself, so it removes neutrinos and other dead branches and keeps
+  a parent whose daughters do leave hits. A DOT dumped without a hit index reports
+  zero for every particle; the filter detects that and refuses to run rather than
+  empty the view.
 - Hide particles below an energy threshold in GeV.
 - Levels shown. One entry per truth level plus one for a particle with no level. A
   particle is judged on its dominant level, the same one that gives it its colour,
   so the list is a partition rather than an overlapping set of tags.
+
+A line under the filters reports how many nodes survive them, and says when a
+filter cannot run.
 
 Hiding always collapses. Every collapsing filter, including the older parton-shower
 one, contributes to a single hidden set, and one pass then joins the visible parents

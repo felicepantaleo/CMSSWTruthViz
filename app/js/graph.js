@@ -565,6 +565,7 @@ const GraphManager = {
     init(data) {
         console.log('Initializing graph with', data.nodes.length, 'nodes and', data.edges.length, 'edges');
         this.graphName = data.metadata?.graph_name || data.graph_name || '';
+        this._simHitInformation = undefined;
         this.updateLegend();
         this.registerLayoutExtensions();
 
@@ -1394,6 +1395,7 @@ const GraphManager = {
         }
 
         if (hiddenNodes.length === 0) {
+            this.reportFilterState();
             return;
         }
 
@@ -1402,6 +1404,25 @@ const GraphManager = {
         hiddenNodes.addClass('parton-shower-filtered');
         hiddenNodes.connectedEdges().addClass('parton-shower-filtered');
         this.addPartonShowerBypassEdges(hiddenNodes);
+        this.reportFilterState();
+    },
+
+    /**
+     * Show how many nodes survive the filters, and warn when a filter cannot run.
+     */
+    reportFilterState() {
+        const status = document.getElementById('filter-status');
+        if (!status) return;
+
+        const total = this.cy.nodes().length;
+        const visible = this.cy.nodes().filter(node => !node.hasClass('parton-shower-filtered')).length;
+        const messages = [`Showing ${visible} of ${total} nodes.`];
+
+        if (this.hideZeroSimHitSubgraphs && !this.graphHasSimHitInformation()) {
+            messages.push('This graph carries no sim-hit counts, so the sim-hit filter is not applied.');
+        }
+
+        status.textContent = messages.join(' ');
     },
 
     /**
@@ -1443,6 +1464,22 @@ const GraphManager = {
         return hidden;
     },
 
+    /**
+     * Report whether the graph carries sim-hit counts at all. A DOT dumped without
+     * a hit index reports zero for every particle, and hiding on that would empty
+     * the view rather than drop the particles that leave nothing behind.
+     */
+    graphHasSimHitInformation() {
+        if (this._simHitInformation === undefined) {
+            this._simHitInformation = this.cy.nodes().some((node) => {
+                if (this.truthKind(node) !== 'particle') return false;
+                const simHits = Number.parseInt(node.data('truthSimHits'), 10);
+                return Number.isFinite(simHits) && simHits > 0;
+            });
+        }
+        return this._simHitInformation;
+    },
+
     hasActiveTruthFilter() {
         return this.hidePileup
             || this.hideUnderlyingEvent
@@ -1469,7 +1506,7 @@ const GraphManager = {
 
         if (kind !== 'particle') return false;
 
-        if (this.hideZeroSimHitSubgraphs) {
+        if (this.hideZeroSimHitSubgraphs && this.graphHasSimHitInformation()) {
             const simHits = Number.parseInt(node.data('truthSimHits'), 10);
             if (Number.isFinite(simHits) && simHits === 0) return true;
         }
