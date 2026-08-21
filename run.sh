@@ -161,6 +161,12 @@ elif [ "$(cat "$BUNDLE_SOURCE_PATH")" != "$DOT_FILE_ABS" ]; then
 elif [ "$DOT_FILE_ABS" -nt "$BUNDLE_PATH" ]; then
     echo "Selected DOT file is newer than the bundle. Regenerating bundle..."
     should_build_bundle=true
+elif [ "preprocess/parse_graph.py" -nt "$BUNDLE_PATH" ] || [ "preprocess/build_bundle.py" -nt "$BUNDLE_PATH" ]; then
+    # The bundle records the fields the preprocessing knew about when it ran. After
+    # an update the DOT file is unchanged, so only the code timestamp reveals that
+    # the bundle is stale.
+    echo "Preprocessing is newer than the bundle. Regenerating bundle..."
+    should_build_bundle=true
 else
     echo "✓ Bundle is up to date"
 fi
