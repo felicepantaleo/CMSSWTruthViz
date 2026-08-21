@@ -250,7 +250,14 @@ def truth_classification(node_id, attrs):
 
     if not is_particle_node(node_id, data_attrs, shape):
         reason = str(data_attrs.get("reason", "") or "").strip()
-        title = reason if reason and reason != "Unknown" else "vertex"
+        if reason and reason != "Unknown":
+            title = reason
+        elif str(data_attrs.get("isSource", "")).strip() == "1":
+            title = "source"
+        elif str(data_attrs.get("isSink", "")).strip() == "1":
+            title = "sink"
+        else:
+            title = "vertex"
         in_count = parse_count(data_attrs.get("nIn"))
         out_count = parse_count(data_attrs.get("nOut"))
         hover = [title, f"{in_count} in, {out_count} out"]

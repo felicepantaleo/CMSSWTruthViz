@@ -292,6 +292,13 @@ const GraphManager = {
     },
 
     getCompactLabelFromData(data) {
+        // A truth-classified node carries its own two-line label: the title, which
+        // is the particle name or the vertex reason, and a short second line.
+        if (data.truthKind) {
+            const title = this.htmlLabelToCanvasText(data.truthTitle || data.id);
+            return data.truthSubtitle ? `${title}\n${data.truthSubtitle}` : title;
+        }
+
         const dataAccessor = {
             id: () => data.id,
             data: key => data[key]
@@ -1030,7 +1037,7 @@ const GraphManager = {
         if (!text) return;
 
         const element = this.nodeTooltipElement();
-        element.textContent = text;
+        element.textContent = this.htmlLabelToCanvasText(text);
         element.classList.remove('hidden');
         this.moveNodeTooltip(renderedPosition);
     },
