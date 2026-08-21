@@ -261,14 +261,14 @@ def truth_classification(node_id, attrs):
         in_count = parse_count(data_attrs.get("nIn"))
         out_count = parse_count(data_attrs.get("nOut"))
         hover = [title, f"{in_count} in, {out_count} out"]
-        position = tuple_values(data_attrs.get("x4"))
-        if len(position) >= 3:
-            hover.append(f"z = {position[2]} cm")
+        x4 = str(data_attrs.get("x4", "") or "").strip()
+        if x4:
+            hover.append(f"x4: {x4}")
         return {
             "truthKind": "vertex",
             "truthReason": reason,
             "truthTitle": title,
-            "truthSubtitle": f"{out_count} out",
+            "truthSubtitle": f"x4: {x4}" if x4 else f"{out_count} out",
             "truthHover": "\n".join(hover),
         }
 

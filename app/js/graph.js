@@ -566,14 +566,22 @@ const GraphManager = {
                     style: {
                         'padding': 2,
                         'label': 'data(label)',
-                        'text-valign': 'center',
+                        'text-valign': function(ele) {
+                            return GraphManager.truthKind(ele) === 'vertex' ? 'bottom' : 'center';
+                        },
                         'text-halign': 'center',
+                        'text-margin-y': function(ele) {
+                            return GraphManager.truthKind(ele) === 'vertex' ? 3 : 0;
+                        },
                         'font-size': function(ele) {
                             return GraphManager.getNodeFontSize(ele);
                         },
                         'font-weight': 600,
                         'text-wrap': 'wrap',
                         'text-max-width': function(ele) {
+                            // The vertex four-position needs one line, not the width
+                            // of the diamond it sits under.
+                            if (GraphManager.truthKind(ele) === 'vertex') return 190;
                             const size = GraphManager.getNodeSize(ele);
                             return Number.isFinite(size) ? Math.max(22, size - 4) : 80;
                         },
@@ -1064,7 +1072,19 @@ const GraphManager = {
     /**
      * Setup graph-level view option controls.
      */
+    setupLegendToggle() {
+        const toggle = document.getElementById('legend-toggle');
+        const legend = document.getElementById('legend');
+        if (!toggle || !legend) return;
+
+        toggle.addEventListener('click', () => {
+            const collapsed = legend.classList.toggle('collapsed');
+            toggle.setAttribute('aria-expanded', String(!collapsed));
+        });
+    },
+
     setupViewOptions() {
+        this.setupLegendToggle();
         const hideGenEventCheckbox = document.getElementById('hide-gen-event-checkbox');
         if (hideGenEventCheckbox) {
             hideGenEventCheckbox.checked = this.hideGenEventNodes;
