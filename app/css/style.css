@@ -1383,3 +1383,27 @@ body {
     color: #7f8c8d;
     line-height: 1.35;
 }
+
+/* Control bar toggle. The bar folds away so the graph gets the whole window;
+   the button stays on top of the canvas so it can always be brought back. */
+#controls-toggle {
+    position: fixed;
+    top: 6px;
+    right: 8px;
+    z-index: 1100;
+    padding: 3px 9px;
+    background: rgba(44, 62, 80, 0.9);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+#app.controls-collapsed #controls {
+    display: none;
+}
+
+#app.controls-collapsed #controls-toggle {
+    background: rgba(44, 62, 80, 0.75);
+}

@@ -1213,8 +1213,44 @@ const GraphManager = {
         });
     },
 
+    /**
+     * Let the control bar fold away, so the graph gets the whole window. The
+     * button stays visible, and H toggles it from the keyboard.
+     */
+    setupControlsToggle() {
+        const toggle = document.getElementById('controls-toggle');
+        const app = document.getElementById('app');
+        if (!toggle || !app) return;
+
+        const apply = () => {
+            const collapsed = app.classList.contains('controls-collapsed');
+            toggle.setAttribute('aria-expanded', String(!collapsed));
+            toggle.textContent = collapsed ? 'Show controls' : 'Hide controls';
+            if (this.cy) this.cy.resize();
+        };
+
+        toggle.addEventListener('click', () => {
+            app.classList.toggle('controls-collapsed');
+            apply();
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'h' && event.key !== 'H') return;
+            const target = event.target;
+            const tag = target && target.tagName ? target.tagName.toUpperCase() : '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            if (target && target.isContentEditable) return;
+
+            app.classList.toggle('controls-collapsed');
+            apply();
+        });
+
+        apply();
+    },
+
     setupViewOptions() {
         this.setupLegendToggle();
+        this.setupControlsToggle();
         this.buildLevelLegend();
         this.setupTruthFilters();
         const hideGenEventCheckbox = document.getElementById('hide-gen-event-checkbox');

@@ -76,7 +76,9 @@ each node, and the frontend maps them onto the canvas:
   because the four-position is much wider than the node. Hovering a node opens the
   full summary, which carries the incoming and outgoing counts.
 
-The legend collapses to its title bar, and it scrolls inside the graph container
+The control bar folds away with its own button or with the H key, so the graph can
+use the whole window; the button stays over the canvas to bring it back. The legend
+collapses to its title bar, and it scrolls inside the graph container
 rather than growing under the controls bar. Its truth-level list is generated from
 the same vocabulary as the level filter, so the two cannot drift apart.
 
