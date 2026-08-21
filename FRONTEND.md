@@ -80,6 +80,11 @@ The legend collapses to its title bar, and it scrolls inside the graph container
 rather than growing under the controls bar. Its truth-level list is generated from
 the same vocabulary as the level filter, so the two cannot drift apart.
 
+A particle with no PDG identity is named by the producer, not by the PDG table: the
+dumper writes `connector` or `signal stand-in` into the first row of the HTML label
+rather than into an attribute, so the viewer reads the title from there and shows no
+energy for it.
+
 ### Truth filters
 
 Four filters apply to the logical graph, in the view options:
@@ -89,6 +94,8 @@ Four filters apply to the logical graph, in the view options:
   `truth::Branch::isFromPileup()`.
 - Hide underlying event. Drops particles carrying the `underlyingEvent` level and
   the artificial underlying-event vertex.
+- Hide subgraphs with 0 sim hits. Drops a particle whose whole subgraph leaves no
+  sim hit in any channel, so it can never be reconstructed.
 - Hide particles below an energy threshold in GeV.
 - Levels shown. One entry per truth level plus one for a particle with no level. A
   particle is judged on its dominant level, the same one that gives it its colour,

@@ -23,6 +23,7 @@ const GraphManager = {
     // are joined to its visible children, so nothing is ever orphaned.
     hidePileup: false,
     hideUnderlyingEvent: false,
+    hideZeroSimHitSubgraphs: false,
     energyThresholdGeV: 0,
     hiddenTruthLevels: new Set(),
     hideSmallDisconnectedSubgraphs: true,
@@ -1135,6 +1136,12 @@ const GraphManager = {
             underlyingEvent.addEventListener('change', () => this.setHideUnderlyingEvent(underlyingEvent.checked));
         }
 
+        const zeroSimHits = document.getElementById('hide-zero-simhits-checkbox');
+        if (zeroSimHits) {
+            zeroSimHits.checked = this.hideZeroSimHitSubgraphs;
+            zeroSimHits.addEventListener('change', () => this.setHideZeroSimHitSubgraphs(zeroSimHits.checked));
+        }
+
         const threshold = document.getElementById('energy-threshold-input');
         if (threshold) {
             threshold.value = String(this.energyThresholdGeV);
@@ -1439,6 +1446,7 @@ const GraphManager = {
     hasActiveTruthFilter() {
         return this.hidePileup
             || this.hideUnderlyingEvent
+            || this.hideZeroSimHitSubgraphs
             || this.energyThresholdGeV > 0
             || this.hiddenTruthLevels.size > 0;
     },
@@ -1460,6 +1468,11 @@ const GraphManager = {
         }
 
         if (kind !== 'particle') return false;
+
+        if (this.hideZeroSimHitSubgraphs) {
+            const simHits = Number.parseInt(node.data('truthSimHits'), 10);
+            if (Number.isFinite(simHits) && simHits === 0) return true;
+        }
 
         if (this.energyThresholdGeV > 0) {
             const energy = Number.parseFloat(node.data('truthEnergy'));
@@ -1485,6 +1498,12 @@ const GraphManager = {
 
     setHideUnderlyingEvent(shouldHide) {
         this.hideUnderlyingEvent = shouldHide;
+        this.applyCollapsingFilters();
+        this.relayoutVisible();
+    },
+
+    setHideZeroSimHitSubgraphs(shouldHide) {
+        this.hideZeroSimHitSubgraphs = shouldHide;
         this.applyCollapsingFilters();
         this.relayoutVisible();
     },

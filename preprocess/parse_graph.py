@@ -173,6 +173,25 @@ def format_energy(value):
     return f"{energy * 1000:.0f} MeV"
 
 
+def producer_big_name(attrs):
+    """Return the title the producer put on the node.
+
+    TruthLogicalGraphDumper writes the particle role into the first row of the
+    HTML label rather than into an attribute, so a connector and a signal
+    stand-in are only named there.
+    """
+    raw = clean_attr_value(attrs.get("label", ""))
+    if not raw:
+        return None
+
+    match = re.search(r'POINT-SIZE="22"><B>(.*?)</B>', raw, re.S)
+    if not match:
+        return None
+
+    name = match.group(1).strip()
+    return name or None
+
+
 def is_pileup(data_attrs):
     """Return whether the node comes from a pile-up collision.
 
@@ -205,6 +224,20 @@ def artificial_role_from_attrs(data_attrs):
 
     role = str(data_attrs.get("role", "") or "").strip().lower()
     return ARTIFICIAL_ROLES.get(role, "interaction")
+
+
+def subgraph_sim_hits(data_attrs):
+    """Return the sim hits of the particle's whole subgraph, over all channels.
+
+    The subgraph count already contains the particle's own hits, but the direct
+    count is taken as well so a malformed pair cannot report zero.
+    """
+    total = 0
+    for channel in ("", "Tracker", "Mtd", "Muon"):
+        direct = parse_count(data_attrs.get(f"nDirect{channel}SimHits"))
+        subgraph = parse_count(data_attrs.get(f"nSubgraph{channel}SimHits"))
+        total += max(direct, subgraph)
+    return total
 
 
 def hit_footprint_from_attrs(data_attrs):
@@ -289,16 +322,21 @@ def truth_classification(node_id, attrs):
         }
 
     particle_id = particle_id_from_attrs(data_attrs)
-    title = particle_name_from_id(particle_id) or (str(particle_id) if particle_id is not None else node_id)
+    has_pdg_identity = particle_id is not None and str(particle_id).strip() not in ("", "0")
+    title = (
+        (particle_name_from_id(particle_id) if has_pdg_identity else None)
+        or producer_big_name(attrs)
+        or (str(particle_id) if particle_id is not None else node_id)
+    )
     levels = truth_levels_from_attrs(data_attrs)
     level = dominant_truth_level(levels)
     footprint = hit_footprint_from_attrs(data_attrs)
     energy = format_energy(fourth_tuple_value(data_attrs.get("p4")))
 
     hover = [title]
-    if particle_id is not None:
+    if has_pdg_identity:
         hover[0] = f"{title} ({particle_id})"
-    if energy:
+    if energy and has_pdg_identity:
         hover.append(f"E = {energy}")
     hover.append(f"levels: {', '.join(levels) if levels else 'none'}")
 
@@ -327,9 +365,10 @@ def truth_classification(node_id, attrs):
         "truthLevels": levels,
         "truthFootprint": footprint,
         "truthEnergy": energy_value if energy_value is not None else -1.0,
+        "truthSimHits": subgraph_sim_hits(data_attrs),
         "truthPileup": 1 if is_pileup(data_attrs) else 0,
         "truthTitle": title,
-        "truthSubtitle": energy or "",
+        "truthSubtitle": (energy or "") if has_pdg_identity else "",
         "truthHover": "\n".join(hover),
     }
 
