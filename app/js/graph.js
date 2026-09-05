@@ -101,6 +101,19 @@ const GraphManager = {
         plain: '#34495e'
     },
     truthArtificialNodeSize: 64,
+
+    // Reco overlay. A reco object is drawn as a rounded rectangle joined to the truth
+    // node its association chose, and the working point decides which edge is shown.
+    recoNodeSize: 46,
+    recoDomainColors: {
+        tracksters: '#0d7d8c',
+        tracks: '#5b6ee1',
+        pfCandidates: '#c46a1b',
+        jets: '#6a7b2e',
+        vertices: '#8c5a8c'
+    },
+    activeWorkingPoint: '',
+    workingPoints: [],
     defaultNodeSize: 58,
     vertexNodeSize: 30,
     eventNodeSize: 88,
@@ -223,6 +236,90 @@ const GraphManager = {
 
     isLogicalGraph() {
         return this.graphName === 'TruthLogicalGraph';
+    },
+
+    /**
+     * Turn the association file into reco nodes and one match edge per working point.
+     * The edge target is the truth node the match names, which is the same particle
+     * index the graph dumper wrote, so no name lookup is needed.
+     */
+    buildRecoElements(associations, truthNodeIds) {
+        const nodes = [];
+        const edges = [];
+        if (!associations || !Array.isArray(associations.recoObjects)) {
+            return { nodes, edges, workingPoints: [] };
+        }
+
+        const workingPoints = associations.workingPoints || [];
+        associations.recoObjects.forEach((object) => {
+            const matchesByWp = object.matches || {};
+            // A reco object that no working point matched would float unattached, so it
+            // is left out rather than drawn with no edge.
+            const attached = workingPoints.some(wp => (matchesByWp[wp] || []).some(m => truthNodeIds.has(m.node)));
+            if (!attached) return;
+
+            nodes.push({
+                data: {
+                    id: object.id,
+                    truthKind: 'reco',
+                    recoDomain: object.domain,
+                    recoCollection: object.collection,
+                    recoIndex: object.index,
+                    rawEnergy: object.rawEnergy,
+                    truthTitle: object.collection,
+                    truthSubtitle: `${Number(object.rawEnergy).toFixed(1)} GeV`,
+                    truthHover: [
+                        `${object.collection} #${object.index}`,
+                        `raw energy ${Number(object.rawEnergy).toFixed(2)} GeV`,
+                        `eta ${Number(object.eta).toFixed(2)}  phi ${Number(object.phi).toFixed(2)}`,
+                        `${object.nLayerClusters} layer clusters`,
+                        ...workingPoints.map((wp) => {
+                            const best = (matchesByWp[wp] || [])[0];
+                            return best
+                                ? `${wp}: ${best.node}  score ${Number(best.score).toFixed(3)}`
+                                : `${wp}: no match`;
+                        })
+                    ].join('\n')
+                }
+            });
+
+            workingPoints.forEach((wp) => {
+                const best = (matchesByWp[wp] || [])[0];
+                if (!best || !truthNodeIds.has(best.node)) return;
+                edges.push({
+                    data: {
+                        id: `match-${wp}-${object.id}`,
+                        source: object.id,
+                        target: best.node,
+                        isMatchEdge: true,
+                        workingPoint: wp,
+                        matchScore: best.score,
+                        matchSharedEnergy: best.sharedEnergy
+                    }
+                });
+            });
+        });
+
+        return { nodes, edges, workingPoints };
+    },
+
+    /**
+     * Show the match edges of one working point and hide the others, so switching the
+     * point moves the match on the canvas.
+     */
+    setWorkingPoint(name) {
+        this.activeWorkingPoint = name;
+        if (!this.cy) return;
+
+        this.cy.edges('[isMatchEdge]').forEach((edge) => {
+            edge.toggleClass('inactive-match', edge.data('workingPoint') !== name);
+        });
+
+        const status = document.getElementById('working-point-status');
+        if (status) {
+            const shown = this.cy.edges('[isMatchEdge]').filter(e => e.data('workingPoint') === name).length;
+            status.textContent = `${shown} matched reco objects at ${name}.`;
+        }
     },
 
     // A node carries a truth classification when the preprocessing recognised the
@@ -419,6 +516,9 @@ const GraphManager = {
 
     getTruthFillColor(ele) {
         const kind = this.truthKind(ele);
+        if (kind === 'reco') {
+            return this.recoDomainColors[String(ele.data('recoDomain') || '')] || this.recoDomainColors.tracksters;
+        }
         if (kind === 'artificial') {
             return this.truthArtificialColors[this.truthRole(ele)] || this.truthArtificialColors.interaction;
         }
@@ -427,6 +527,7 @@ const GraphManager = {
     },
 
     getNodeTextColor(ele) {
+        if (this.truthKind(ele) === 'reco') return '#fff';
         if (!this.hasTruthClassification(ele)) return '#000';
         return this.truthLevelDarkFills.has(this.getTruthFillColor(ele)) ? '#fff' : '#000';
     },
@@ -463,6 +564,7 @@ const GraphManager = {
 
     getNodeShape(ele) {
         const truthKind = this.truthKind(ele);
+        if (truthKind === 'reco') return 'round-rectangle';
         if (truthKind === 'artificial') {
             return this.truthArtificialShapes[this.truthRole(ele)] || 'star';
         }
@@ -494,6 +596,7 @@ const GraphManager = {
 
     getNodeSize(ele) {
         const truthKind = this.truthKind(ele);
+        if (truthKind === 'reco') return this.recoNodeSize;
         if (truthKind === 'artificial') return this.truthArtificialNodeSize;
         if (truthKind === 'vertex') return this.vertexNodeSize;
         if (truthKind === 'particle') {
@@ -517,6 +620,7 @@ const GraphManager = {
 
     getNodeFontSize(ele) {
         const truthKind = this.truthKind(ele);
+        if (truthKind === 'reco') return 10;
         if (truthKind === 'artificial') return 11;
         if (truthKind === 'vertex') return 8;
         if (truthKind === 'particle') return 16;
@@ -569,6 +673,12 @@ const GraphManager = {
         this.updateLegend();
         this.registerLayoutExtensions();
 
+        // Reco overlay, when the job also produced the associations.
+        const truthNodeIds = new Set(data.nodes.map(n => n.id));
+        const reco = this.buildRecoElements(window.associationData, truthNodeIds);
+        this.workingPoints = reco.workingPoints;
+        this.activeWorkingPoint = reco.workingPoints[0] || '';
+
         // Convert data to Cytoscape format
         const elements = {
             nodes: data.nodes.map(n => ({
@@ -577,15 +687,17 @@ const GraphManager = {
                     ...n,
                     label: this.getCompactLabelFromData(n)
                 }
-            })),
-            edges: data.edges.map(e => ({
+            })).concat(reco.nodes.map(n => ({
+                data: { ...n.data, label: this.getCompactLabelFromData(n.data) }
+            }))),
+            edges: reco.edges.concat(data.edges.map(e => ({
                 data: {
                     id: `${e.source}-${e.target}`,
                     source: e.source,
                     target: e.target,
                     ...e
                 }
-            }))
+            })))
         };
 
         // Initialize Cytoscape
@@ -770,6 +882,29 @@ const GraphManager = {
                 },
                 {
                     selector: 'edge.small-subgraph-filtered',
+                    style: {
+                        'display': 'none'
+                    }
+                },
+                {
+                    selector: 'edge[isMatchEdge]',
+                    style: {
+                        'line-style': 'dashed',
+                        'line-color': '#0d7d8c',
+                        'target-arrow-color': '#0d7d8c',
+                        'target-arrow-shape': 'triangle',
+                        'curve-style': 'bezier',
+                        'width': function(ele) {
+                            const shared = Number.parseFloat(ele.data('matchSharedEnergy'));
+                            if (!Number.isFinite(shared) || shared <= 0) return 1.5;
+                            return Math.min(7, 1.5 + Math.sqrt(shared) * 12);
+                        },
+                        'opacity': 0.95,
+                        'z-index': 20
+                    }
+                },
+                {
+                    selector: 'edge.inactive-match',
                     style: {
                         'display': 'none'
                     }
@@ -1248,8 +1383,46 @@ const GraphManager = {
         apply();
     },
 
+    /**
+     * Build the working-point selector from what the association file carries, and
+     * apply the first point. Hidden when the job produced no associations.
+     */
+    setupWorkingPointControl() {
+        const container = document.getElementById('working-point-control');
+        if (!container) return;
+
+        if (this.workingPoints.length === 0) {
+            container.classList.add('hidden');
+            return;
+        }
+        container.classList.remove('hidden');
+
+        const items = document.getElementById('working-point-items');
+        items.innerHTML = '';
+        this.workingPoints.forEach((name) => {
+            const label = document.createElement('label');
+            label.className = 'checkbox-label';
+
+            const radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = 'working-point';
+            radio.value = name;
+            radio.checked = name === this.activeWorkingPoint;
+            radio.addEventListener('change', () => {
+                if (radio.checked) this.setWorkingPoint(name);
+            });
+
+            label.appendChild(radio);
+            label.appendChild(document.createTextNode(name));
+            items.appendChild(label);
+        });
+
+        this.setWorkingPoint(this.activeWorkingPoint);
+    },
+
     setupViewOptions() {
         this.setupLegendToggle();
+        this.setupWorkingPointControl();
         this.setupControlsToggle();
         this.buildLevelLegend();
         this.setupTruthFilters();
@@ -1531,6 +1704,7 @@ const GraphManager = {
      */
     isTruthFiltered(node) {
         if (!this.hasTruthClassification(node)) return false;
+        if (this.truthKind(node) === 'reco') return false;
 
         if (this.hidePileup && String(node.data('truthPileup')) === '1') return true;
 

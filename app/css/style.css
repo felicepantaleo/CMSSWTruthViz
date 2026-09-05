@@ -1407,3 +1407,28 @@ body {
 #app.controls-collapsed #controls-toggle {
     background: rgba(44, 62, 80, 0.75);
 }
+
+/* Reco overlay controls and legend swatch. */
+#working-point-control {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid #ddd;
+}
+
+#working-point-control.hidden {
+    display: none;
+}
+
+#working-point-items {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.legend-match-edge {
+    background: transparent;
+    border: none;
+    border-top: 3px dashed #0d7d8c;
+    height: 0;
+    align-self: center;
+}

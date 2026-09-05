@@ -55,6 +55,8 @@ async function initApp() {
             });
         }
 
+        await attachAssociationData();
+
         // Initialize graph
         GraphManager.init(window.bundleData);
 
@@ -154,3 +156,18 @@ function updateStats(stats) {
 
 // Start application when DOM is ready
 document.addEventListener('DOMContentLoaded', initApp);
+
+/**
+ * Load the reco to truth-branch associations if the job produced them. A graph dumped
+ * without the associators simply has no file, which is not an error.
+ */
+async function attachAssociationData() {
+    try {
+        const response = await fetch('../data/associations.json');
+        if (!response.ok) return;
+        window.associationData = await response.json();
+        console.log('Associations loaded:', window.associationData.recoObjects?.length || 0, 'reco objects');
+    } catch (error) {
+        console.log('No association data:', error.message);
+    }
+}
