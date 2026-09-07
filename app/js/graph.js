@@ -243,6 +243,25 @@ const GraphManager = {
      * The edge target is the truth node the match names, which is the same particle
      * index the graph dumper wrote, so no name lookup is needed.
      */
+    // The match to draw for one working point. The Fixed map ranks every candidate root
+    // by shared energy, and an ancestor always holds the hits of its descendants, so its
+    // first entries are hard-process ancestors. Drawn is the best candidate that enters
+    // the calorimeter (a caloBoundary member), which is the level the validation reads
+    // dominance from; then any level member; then the first entry. The adaptive points
+    // carry the single branch they climbed to.
+    pickMatch(matches, truthNodeIds) {
+        const present = (matches || []).filter(m => truthNodeIds.has(m.node));
+        if (present.length === 0) return null;
+        const levelsOf = (id) => {
+            const node = this.getBundleNode(id) || {};
+            const levels = node.truthLevels;
+            return Array.isArray(levels) ? levels : (levels ? String(levels).split(',') : []);
+        };
+        return present.find(m => levelsOf(m.node).includes('caloBoundary'))
+            || present.find(m => levelsOf(m.node).length > 0)
+            || present[0];
+    },
+
     buildRecoElements(associations, truthNodeIds) {
         const nodes = [];
         const edges = [];
@@ -274,7 +293,7 @@ const GraphManager = {
                         `eta ${Number(object.eta).toFixed(2)}  phi ${Number(object.phi).toFixed(2)}`,
                         `${object.nLayerClusters} layer clusters`,
                         ...workingPoints.map((wp) => {
-                            const best = (matchesByWp[wp] || [])[0];
+                            const best = this.pickMatch(matchesByWp[wp], truthNodeIds);
                             return best
                                 ? `${wp}: ${best.node}  score ${Number(best.score).toFixed(3)}`
                                 : `${wp}: no match`;
@@ -284,8 +303,8 @@ const GraphManager = {
             });
 
             workingPoints.forEach((wp) => {
-                const best = (matchesByWp[wp] || [])[0];
-                if (!best || !truthNodeIds.has(best.node)) return;
+                const best = this.pickMatch(matchesByWp[wp], truthNodeIds);
+                if (!best) return;
                 edges.push({
                     data: {
                         id: `match-${wp}-${object.id}`,
