@@ -6,7 +6,22 @@
 // of the detector. The axis ranges are fixed to it, so the view keeps its scale from node
 // to node and the user zooms in or out instead.
 const CMS_RADIUS_CM = 750;
-const CMS_HALF_LENGTH_CM = 1100;
+const CMS_HALF_LENGTH_CM = 1300;
+
+// Subdetector envelopes drawn as transparent cylinders in the colour of their hits, cm,
+// Phase-2 layout: [name, radius, z from, z to, detector whose colour to use]. A pair of
+// entries with mirrored z draws both endcaps.
+const SUBDETECTOR_ENVELOPES = [
+    ['tracker', 112, -270, 270, 'Tracker'],
+    ['ECAL barrel', 152, -300, 300, 'ECAL barrel'],
+    ['HCAL barrel', 287, -430, 430, 'HCAL barrel'],
+    ['HGCAL CE-E', 260, 320, 364, 'HGCAL EE'],
+    ['HGCAL CE-E', 260, -364, -320, 'HGCAL EE'],
+    ['HGCAL CE-H', 260, 364, 520, 'HGCAL HSi'],
+    ['HGCAL CE-H', 260, -520, -364, 'HGCAL HSi'],
+    ['HF', 130, 1110, 1265, 'HF'],
+    ['HF', 130, -1265, -1110, 'HF']
+];
 
 // One colour and one marker per subdetector, so hits from different detectors tell apart.
 const DETECTOR_STYLE = {
@@ -157,7 +172,7 @@ const Plot3DPanelManager = {
         this.emptyState.classList.add('hidden');
         this.plot.classList.remove('hidden');
 
-        const traces = [this.envelopeTrace(), this.beamLineTrace(), ...this.hitTraces(rechits)];
+        const traces = [this.envelopeTrace(), this.beamLineTrace(), ...this.subdetectorTraces(), ...this.hitTraces(rechits)];
 
         const halfWidth = CMS_RADIUS_CM * 1.07;
         const halfLength = CMS_HALF_LENGTH_CM * 1.05;
@@ -223,19 +238,20 @@ const Plot3DPanelManager = {
         });
     },
 
-    envelopeTrace() {
+    // An open cylinder of radius r between zFrom and zTo, as one transparent surface.
+    cylinderTrace(name, radius, zFrom, zTo, color, opacity, showlegend) {
         const steps = 48;
         const x = [];
         const y = [];
         const z = [];
-        [-CMS_HALF_LENGTH_CM, CMS_HALF_LENGTH_CM].forEach(zEnd => {
+        [zFrom, zTo].forEach(zEnd => {
             const ringX = [];
             const ringY = [];
             const ringZ = [];
             for (let i = 0; i <= steps; i += 1) {
                 const angle = (2 * Math.PI * i) / steps;
-                ringX.push(CMS_RADIUS_CM * Math.cos(angle));
-                ringY.push(CMS_RADIUS_CM * Math.sin(angle));
+                ringX.push(radius * Math.cos(angle));
+                ringY.push(radius * Math.sin(angle));
                 ringZ.push(zEnd);
             }
             x.push(ringX);
@@ -245,17 +261,33 @@ const Plot3DPanelManager = {
 
         return {
             type: 'surface',
-            name: 'CMS envelope',
+            name,
+            legendgroup: name,
             x,
             y,
             z,
-            opacity: 0.08,
+            opacity,
             showscale: false,
-            showlegend: false,
+            showlegend,
             hoverinfo: 'skip',
-            colorscale: [[0, '#0033a0'], [1, '#0033a0']],
+            colorscale: [[0, color], [1, color]],
             contours: { x: { show: false }, y: { show: false }, z: { show: false } }
         };
+    },
+
+    envelopeTrace() {
+        return this.cylinderTrace('CMS envelope', CMS_RADIUS_CM, -CMS_HALF_LENGTH_CM, CMS_HALF_LENGTH_CM, '#0033a0', 0.05, false);
+    },
+
+    // The subdetector cylinders, one legend entry per name so a pair of endcaps toggles together.
+    subdetectorTraces() {
+        const seen = new Set();
+        return SUBDETECTOR_ENVELOPES.map(([name, radius, zFrom, zTo, detector]) => {
+            const color = (DETECTOR_STYLE[detector] || DETECTOR_STYLE.other).color;
+            const first = !seen.has(name);
+            seen.add(name);
+            return this.cylinderTrace(name, radius, zFrom, zTo, color, 0.12, first);
+        });
     },
 
     beamLineTrace() {

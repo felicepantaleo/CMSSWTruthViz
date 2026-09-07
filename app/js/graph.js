@@ -618,6 +618,16 @@ const GraphManager = {
         return this.defaultNodeSize;
     },
 
+    // Particles and reco objects carry their text inside the node, so they are wider
+    // than tall; vertices keep their label below the diamond and stay square.
+    getNodeWidth(ele) {
+        const size = this.getNodeSize(ele);
+        const truthKind = this.truthKind(ele);
+        if (truthKind === 'particle' || truthKind === 'reco') return size * 1.8;
+        if (truthKind === 'vertex' || truthKind === 'artificial') return size;
+        return this.isParticleNode(ele) ? size * 1.8 : size;
+    },
+
     getNodeFontSize(ele) {
         const truthKind = this.truthKind(ele);
         if (truthKind === 'reco') return 10;
@@ -728,8 +738,8 @@ const GraphManager = {
                             // The vertex four-position needs one line, not the width
                             // of the diamond it sits under.
                             if (GraphManager.truthKind(ele) === 'vertex') return 190;
-                            const size = GraphManager.getNodeSize(ele);
-                            return Number.isFinite(size) ? Math.max(22, size - 4) : 80;
+                            const width = GraphManager.getNodeWidth(ele);
+                            return Number.isFinite(width) ? Math.max(22, width - 10) : 80;
                         },
                         'line-height': 1.1,
                         'color': function(ele) {
@@ -751,7 +761,7 @@ const GraphManager = {
                             return GraphManager.getNodeShape(ele);
                         },
                         'width': function(ele) {
-                            return GraphManager.getNodeSize(ele);
+                            return GraphManager.getNodeWidth(ele);
                         },
                         'height': function(ele) {
                             return GraphManager.getNodeSize(ele);
