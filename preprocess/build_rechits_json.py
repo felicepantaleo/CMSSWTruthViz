@@ -16,6 +16,12 @@ BRANCHES = {
     "z": "rechits_rechit_z",
 }
 
+# Further flat tables with the same four fields, read when the tree has them. The
+# truth-graph dump writes the HGCAL rechits as "rechits" and the barrel and forward
+# calorimeter PF rechits as "pfrechits"; a node in the barrel finds its hits only in
+# the second one.
+OPTIONAL_PREFIXES = ("pfrechits",)
+
 
 def to_float_list(values):
     """Convert one event branch payload to a plain JSON-safe float list."""
@@ -47,17 +53,25 @@ def load_event_rechits(root_path, tree_name="Events", event_index=0):
         if missing_branches:
             raise KeyError(f"Missing required branches: {', '.join(missing_branches)}")
 
+        # Every table whose four branches exist, the required one first.
+        tables = [BRANCHES]
+        for prefix in OPTIONAL_PREFIXES:
+            candidate = {key: branch.replace("rechits_", f"{prefix}_", 1) for key, branch in BRANCHES.items()}
+            if all(branch in tree.keys() for branch in candidate.values()):
+                tables.append(candidate)
+
+        branch_names = [branch for table in tables for branch in table.values()]
         arrays = tree.arrays(
-            list(BRANCHES.values()),
+            branch_names,
             entry_start=event_index,
             entry_stop=event_index + 1,
             library="np",
         )
 
-    vectors = {
-        key: to_float_list(arrays[branch_name][0])
-        for key, branch_name in BRANCHES.items()
-    }
+    vectors = {key: [] for key in BRANCHES}
+    for table in tables:
+        for key, branch_name in table.items():
+            vectors[key].extend(to_float_list(arrays[branch_name][0]))
 
     lengths = {key: len(values) for key, values in vectors.items()}
     if len(set(lengths.values())) != 1:
@@ -65,7 +79,7 @@ def load_event_rechits(root_path, tree_name="Events", event_index=0):
 
     rechits = [
         {
-            "ID": vectors["ID"][index],
+            "ID": int(vectors["ID"][index]),
             "x": vectors["x"][index],
             "y": vectors["y"][index],
             "z": vectors["z"][index],
