@@ -312,12 +312,22 @@ def truth_classification(node_id, attrs):
         x4 = str(data_attrs.get("x4", "") or "").strip()
         if x4:
             hover.append(f"x4: {x4}")
+        # The canvas shows where the vertex is as a short radius and z; the full
+        # four-position stays in the hover, so neighbouring labels do not collide.
+        position = tuple_values(data_attrs.get("x4"))
+        subtitle = f"{out_count} out"
+        if len(position) >= 3:
+            try:
+                rho = (float(position[0]) ** 2 + float(position[1]) ** 2) ** 0.5
+                subtitle = f"r {rho:.1f}, z {float(position[2]):.1f} cm"
+            except (TypeError, ValueError):
+                pass
         return {
             "truthKind": "vertex",
             "truthReason": reason,
             "truthPileup": 1 if is_pileup(data_attrs) else 0,
             "truthTitle": title,
-            "truthSubtitle": f"x4: {x4}" if x4 else f"{out_count} out",
+            "truthSubtitle": subtitle,
             "truthHover": "\n".join(hover),
         }
 

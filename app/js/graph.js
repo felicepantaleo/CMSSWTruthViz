@@ -262,6 +262,17 @@ const GraphManager = {
             || present[0];
     },
 
+    // The collection name a reco node shows on the canvas; the hover keeps the full one.
+    shortCollectionName(collection) {
+        const known = {
+            ticlTrackstersCLUE3DHigh: 'CLUE3D trackster',
+            ticlTracksterLinks: 'linked trackster',
+            ticlTracksterLinksSuperclusteringDNN: 'supercluster',
+            ticlCandidate: 'TICL candidate'
+        };
+        return known[collection] || String(collection).replace(/^ticl/, '');
+    },
+
     buildRecoElements(associations, truthNodeIds) {
         const nodes = [];
         const edges = [];
@@ -285,7 +296,7 @@ const GraphManager = {
                     recoCollection: object.collection,
                     recoIndex: object.index,
                     rawEnergy: object.rawEnergy,
-                    truthTitle: object.collection,
+                    truthTitle: this.shortCollectionName(object.collection),
                     truthSubtitle: `${Number(object.rawEnergy).toFixed(1)} GeV`,
                     truthHover: [
                         `${object.collection} #${object.index}`,
@@ -305,11 +316,14 @@ const GraphManager = {
             workingPoints.forEach((wp) => {
                 const best = this.pickMatch(matchesByWp[wp], truthNodeIds);
                 if (!best) return;
+                // The edge runs from the truth node to the reco node, so the layout
+                // ranks a reco object one row below the particle it matched. The arrow
+                // is drawn at the source end and still points at the truth.
                 edges.push({
                     data: {
                         id: `match-${wp}-${object.id}`,
-                        source: object.id,
-                        target: best.node,
+                        source: best.node,
+                        target: object.id,
                         isMatchEdge: true,
                         workingPoint: wp,
                         matchScore: best.score,
@@ -620,7 +634,7 @@ const GraphManager = {
         if (truthKind === 'vertex') return this.vertexNodeSize;
         if (truthKind === 'particle') {
             const particleId = this.getParticlePdgId(ele);
-            const scale = this.smallParticlePdgIds.has(particleId) ? 0.7 : 1;
+            const scale = this.smallParticlePdgIds.has(particleId) ? 0.8 : 1;
             return this.defaultNodeSize * scale;
         }
 
@@ -642,7 +656,8 @@ const GraphManager = {
     getNodeWidth(ele) {
         const size = this.getNodeSize(ele);
         const truthKind = this.truthKind(ele);
-        if (truthKind === 'particle' || truthKind === 'reco') return size * 1.8;
+        if (truthKind === 'particle') return size * 1.8;
+        if (truthKind === 'reco') return size * 2.3;
         if (truthKind === 'vertex' || truthKind === 'artificial') return size;
         return this.isParticleNode(ele) ? size * 1.8 : size;
     },
@@ -652,7 +667,7 @@ const GraphManager = {
         if (truthKind === 'reco') return 10;
         if (truthKind === 'artificial') return 11;
         if (truthKind === 'vertex') return 8;
-        if (truthKind === 'particle') return 16;
+        if (truthKind === 'particle') return 14;
 
         const type = this.getNodeKind(ele);
         if (type === 'GenVertex' || type === 'SimVertex' || type === 'GenSimVertex' || type === 'LogicalVertex' || this.isLogicalVertex(ele)) {
@@ -758,7 +773,7 @@ const GraphManager = {
                             // of the diamond it sits under.
                             if (GraphManager.truthKind(ele) === 'vertex') return 190;
                             const width = GraphManager.getNodeWidth(ele);
-                            return Number.isFinite(width) ? Math.max(22, width - 10) : 80;
+                            return Number.isFinite(width) ? Math.max(22, width - 4) : 80;
                         },
                         'line-height': 1.1,
                         'color': function(ele) {
@@ -920,8 +935,9 @@ const GraphManager = {
                     style: {
                         'line-style': 'dashed',
                         'line-color': '#0d7d8c',
-                        'target-arrow-color': '#0d7d8c',
-                        'target-arrow-shape': 'triangle',
+                        'source-arrow-color': '#0d7d8c',
+                        'source-arrow-shape': 'triangle',
+                        'target-arrow-shape': 'none',
                         'curve-style': 'bezier',
                         'width': function(ele) {
                             const shared = Number.parseFloat(ele.data('matchSharedEnergy'));
@@ -1121,10 +1137,10 @@ const GraphManager = {
                 animate: false,
                 rankDir: 'TB',
                 ranker: 'network-simplex',
-                nodeSep: 20,
-                edgeSep: 5,
-                rankSep: 80,
-                spacingFactor: 0.9,
+                nodeSep: 45,
+                edgeSep: 10,
+                rankSep: 90,
+                spacingFactor: 1.0,
                 fit: false,
                 padding: 30,
                 edgeWeight: edge => this.getDagreEdgeWeight(edge)
@@ -2215,12 +2231,12 @@ const GraphManager = {
             options: {
                 rankdir: 'TB',
                 ranker: 'network-simplex',
-                nodesep: 20,
-                edgesep: 5,
-                ranksep: 80,
+                nodesep: 45,
+                edgesep: 10,
+                ranksep: 90,
                 marginx: 30,
                 marginy: 30,
-                spacingFactor: 0.9
+                spacingFactor: 1.0
             },
             nodes: visibleNodes.map(node => ({
                 id: node.id(),
@@ -2448,6 +2464,13 @@ const GraphManager = {
     },
 
     isEdgeVisibleForLayout(edge) {
+        // Only the first working point anchors reco objects in the layout: it is the
+        // calorimeter-entry match, so the adaptive edges of the other points climb from
+        // there to an ancestor without moving the reco node.
+        if (edge.data('isMatchEdge')) {
+            const anchor = Array.isArray(this.workingPoints) ? this.workingPoints[0] : null;
+            if (anchor && edge.data('workingPoint') !== anchor) return false;
+        }
         return !edge.hasClass('hidden')
             && !edge.hasClass('gen-event-filtered')
             && !edge.hasClass('sim-vertex-key0-filtered')

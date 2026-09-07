@@ -357,7 +357,8 @@ const Plot3DPanelManager = {
             this.normalizeIdList(nodeData.directHitsDetIds).forEach(id => hitIds.add(String(id)));
 
             node.outgoers('edge').forEach(edge => {
-                if (edge.data('isPartonShowerBypass')) {
+                // Match edges lead to reco objects, which carry no hits of their own.
+                if (edge.data('isPartonShowerBypass') || edge.data('isMatchEdge')) {
                     return;
                 }
 
