@@ -186,6 +186,12 @@ if [ ! -f "app/js/bundle.js" ] || [ "data/bundle.json" -nt "app/js/bundle.js" ];
     echo ""
 fi
 
+# Same for the associations, so a page opened as a file shows the reco objects too.
+if [ -f "data/associations.json" ] && { [ ! -f "app/js/associations.js" ] \
+        || [ "data/associations.json" -nt "app/js/associations.js" ]; }; then
+    python preprocess/generate_associations_js.py
+fi
+
 # Start server
 echo ""
 echo "Starting web server..."

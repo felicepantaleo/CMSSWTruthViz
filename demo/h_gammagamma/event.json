@@ -1,0 +1,10 @@
+{
+  "sample": "H125GGgluonfusion_14TeV_TuneCP5",
+  "event": 8,
+  "nodes": 338,
+  "reco": 43,
+  "preset": "-s 25 -d 1 --keepSpectators --attachSources",
+  "look": "two photons, a pair-conversion vertex, one trackster per photon",
+  "dot": "truthlogicalgraph_run1_lumi1_event8.dot",
+  "eventIndex": 0
+}
