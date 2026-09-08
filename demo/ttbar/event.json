@@ -1,0 +1,10 @@
+{
+  "sample": "TTbar_14TeV_TuneCP5",
+  "event": 7,
+  "nodes": 2566,
+  "reco": 93,
+  "preset": "-s 6,-6 -d 1 --keepSpectators --attachSources --keepProductionSiblings",
+  "look": "two tops, the b hadrons with their bHadrons row, the decay vertices; the busiest of the six, its layout takes tens of seconds",
+  "dot": "truthlogicalgraph_run1_lumi1_event7.dot",
+  "eventIndex": 0
+}

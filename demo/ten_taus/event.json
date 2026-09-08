@@ -1,0 +1,10 @@
+{
+  "sample": "TenTau_E_15_500_pythia8",
+  "event": 3,
+  "nodes": 898,
+  "reco": 5,
+  "preset": "-s 15,-15 -d 0 --no-keepSpectators --attachSources",
+  "look": "only five reco objects: most taus of this event are outside the HGCAL acceptance",
+  "dot": "truthlogicalgraph_run1_lumi1_event3.dot",
+  "eventIndex": 0
+}

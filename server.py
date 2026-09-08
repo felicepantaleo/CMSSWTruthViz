@@ -18,7 +18,6 @@ import shutil
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
-import cgi
 
 from truth_pipeline import (
     PipelineOptions,
@@ -30,6 +29,7 @@ from truth_pipeline import (
     parse_non_negative_int,
     process_cmssw_root,
 )
+from multipart_form import MultipartError, parse_multipart_form
 
 
 EMPTY_BUNDLE = {
@@ -270,11 +270,11 @@ class CORSRequestHandler(http.server.SimpleHTTPRequestHandler):
                 return
 
             # Parse form data
-            form = cgi.FieldStorage(
-                fp=self.rfile,
-                headers=self.headers,
-                environ={'REQUEST_METHOD': 'POST'}
-            )
+            try:
+                form = parse_multipart_form(self.rfile, self.headers)
+            except MultipartError as exc:
+                self.send_json_response({'success': False, 'error': str(exc)}, 400)
+                return
 
             # Get uploaded files
             dot_item = self.get_upload_item(form, 'dotFile')
@@ -361,11 +361,11 @@ class CORSRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response({'success': False, 'error': 'Invalid content type'}, 400)
                 return
 
-            form = cgi.FieldStorage(
-                fp=self.rfile,
-                headers=self.headers,
-                environ={'REQUEST_METHOD': 'POST'}
-            )
+            try:
+                form = parse_multipart_form(self.rfile, self.headers)
+            except MultipartError as exc:
+                self.send_json_response({'success': False, 'error': str(exc)}, 400)
+                return
 
             root_item = self.get_upload_item(form, 'rootFile')
             if root_item is None:

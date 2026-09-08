@@ -19,6 +19,13 @@ const GraphManager = {
     hideGenEventNodes: true,
     hideSimVertexKey0Node: true,
     hidePartonShower: false,
+    // Truth filters. Every one of them collapses: a hidden node's visible parents
+    // are joined to its visible children, so nothing is ever orphaned.
+    hidePileup: false,
+    hideUnderlyingEvent: false,
+    hideZeroSimHitSubgraphs: false,
+    energyThresholdGeV: 0,
+    hiddenTruthLevels: new Set(),
     hideSmallDisconnectedSubgraphs: true,
     smallDisconnectedSubgraphNodeLimit: 10,
     nodeTypeColors: {
@@ -27,6 +34,86 @@ const GraphManager = {
         genSim: '#2ecc71',
         event: '#c79f00'
     },
+
+    // The logical truth graph is standalone: a node is described by its own truth
+    // level, its hit footprint and its role, not by GEN or SIM provenance.
+    // Fill colour carries the dominant truth level, most signal-like first.
+    // Same order as TRUTH_LEVEL_ORDER in preprocess/parse_graph.py, most
+    // signal-like first. This is the only place the precedence is written down.
+    truthLevelOrder: [
+        'hardProcess', 'partonJets', 'bHadrons', 'cHadrons', 'visibleTau',
+        'reconstructableFromSignal', 'reconstructableFinalState',
+        'stableLegsFromUpstream', 'stableDecayProducts', 'caloBoundary',
+        'underlyingEvent'
+    ],
+    truthLevelLabels: {
+        hardProcess: 'hard process',
+        partonJets: 'parton jet',
+        bHadrons: 'b hadron',
+        cHadrons: 'c hadron',
+        visibleTau: 'visible tau',
+        reconstructableFromSignal: 'reconstructable from signal',
+        reconstructableFinalState: 'reconstructable final state',
+        stableLegsFromUpstream: 'stable leg from upstream',
+        stableDecayProducts: 'stable decay product',
+        caloBoundary: 'calo boundary',
+        underlyingEvent: 'underlying event',
+        none: 'no level'
+    },
+    truthLevelColors: {
+        hardProcess: '#bd1f01',
+        partonJets: '#e76300',
+        bHadrons: '#a96b59',
+        cHadrons: '#d0a190',
+        visibleTau: '#717581',
+        reconstructableFromSignal: '#832db6',
+        reconstructableFinalState: '#c3a3e0',
+        stableLegsFromUpstream: '#3f90da',
+        stableDecayProducts: '#92dadd',
+        caloBoundary: '#b9ac70',
+        underlyingEvent: '#94a4a2',
+        none: '#e8e8e8'
+    },
+    truthLevelDarkFills: new Set([
+        '#bd1f01', '#e76300', '#832db6', '#3f90da', '#a96b59', '#717581'
+    ]),
+    truthVertexColor: '#d9d9d9',
+    truthArtificialColors: {
+        interaction: '#ffa90e',
+        upstream: '#a96b59',
+        underlyingEvent: '#94a4a2'
+    },
+    truthArtificialShapes: {
+        interaction: 'star',
+        upstream: 'pentagon',
+        underlyingEvent: 'round-rectangle'
+    },
+    // Border width carries the hit footprint. No hits is drawn dashed.
+    truthFootprintBorderWidths: {
+        caloRec: 5,
+        caloSim: 3,
+        tracker: 2,
+        none: 1
+    },
+    truthMarkerColors: {
+        backscattered: '#e76300',
+        checkpoints: '#009988',
+        plain: '#34495e'
+    },
+    truthArtificialNodeSize: 64,
+
+    // Reco overlay. A reco object is drawn as a rounded rectangle joined to the truth
+    // node its association chose, and the working point decides which edge is shown.
+    recoNodeSize: 46,
+    recoDomainColors: {
+        tracksters: '#0d7d8c',
+        tracks: '#5b6ee1',
+        pfCandidates: '#c46a1b',
+        jets: '#6a7b2e',
+        vertices: '#8c5a8c'
+    },
+    activeWorkingPoint: '',
+    workingPoints: [],
     defaultNodeSize: 58,
     vertexNodeSize: 30,
     eventNodeSize: 88,
@@ -151,6 +238,159 @@ const GraphManager = {
         return this.graphName === 'TruthLogicalGraph';
     },
 
+    /**
+     * Turn the association file into reco nodes and one match edge per working point.
+     * The edge target is the truth node the match names, which is the same particle
+     * index the graph dumper wrote, so no name lookup is needed.
+     */
+    // The match to draw for one working point. The Fixed map ranks every candidate root
+    // by shared energy, and an ancestor always holds the hits of its descendants, so its
+    // first entries are hard-process ancestors. Drawn is the best candidate that enters
+    // the calorimeter (a caloBoundary member), which is the level the validation reads
+    // dominance from; then any level member; then the first entry. The adaptive points
+    // carry the single branch they climbed to.
+    pickMatch(matches, truthNodeIds) {
+        const present = (matches || []).filter(m => truthNodeIds.has(m.node));
+        if (present.length === 0) return null;
+        const levelsOf = (id) => {
+            const node = this.getBundleNode(id) || {};
+            const levels = node.truthLevels;
+            return Array.isArray(levels) ? levels : (levels ? String(levels).split(',') : []);
+        };
+        return present.find(m => levelsOf(m.node).includes('caloBoundary'))
+            || present.find(m => levelsOf(m.node).length > 0)
+            || present[0];
+    },
+
+    // The collection name a reco node shows on the canvas; the hover keeps the full one.
+    shortCollectionName(collection) {
+        const known = {
+            ticlTrackstersCLUE3DHigh: 'CLUE3D trackster',
+            ticlTracksterLinks: 'linked trackster',
+            ticlTracksterLinksSuperclusteringDNN: 'supercluster',
+            ticlCandidate: 'TICL candidate'
+        };
+        return known[collection] || String(collection).replace(/^ticl/, '');
+    },
+
+    buildRecoElements(associations, truthNodeIds) {
+        const nodes = [];
+        const edges = [];
+        if (!associations || !Array.isArray(associations.recoObjects)) {
+            return { nodes, edges, workingPoints: [] };
+        }
+
+        const workingPoints = associations.workingPoints || [];
+        associations.recoObjects.forEach((object) => {
+            const matchesByWp = object.matches || {};
+            // A reco object that no working point matched would float unattached, so it
+            // is left out rather than drawn with no edge.
+            const attached = workingPoints.some(wp => (matchesByWp[wp] || []).some(m => truthNodeIds.has(m.node)));
+            if (!attached) return;
+
+            nodes.push({
+                data: {
+                    id: object.id,
+                    truthKind: 'reco',
+                    recoDomain: object.domain,
+                    recoCollection: object.collection,
+                    recoIndex: object.index,
+                    rawEnergy: object.rawEnergy,
+                    truthTitle: this.shortCollectionName(object.collection),
+                    truthSubtitle: `${Number(object.rawEnergy).toFixed(1)} GeV`,
+                    truthHover: [
+                        `${object.collection} #${object.index}`,
+                        `raw energy ${Number(object.rawEnergy).toFixed(2)} GeV`,
+                        `eta ${Number(object.eta).toFixed(2)}  phi ${Number(object.phi).toFixed(2)}`,
+                        `${object.nLayerClusters} layer clusters`,
+                        ...workingPoints.map((wp) => {
+                            const best = this.pickMatch(matchesByWp[wp], truthNodeIds);
+                            return best
+                                ? `${wp}: ${best.node}  score ${Number(best.score).toFixed(3)}`
+                                : `${wp}: no match`;
+                        })
+                    ].join('\n')
+                }
+            });
+
+            workingPoints.forEach((wp) => {
+                const best = this.pickMatch(matchesByWp[wp], truthNodeIds);
+                if (!best) return;
+                // The edge runs from the truth node to the reco node, so the layout
+                // ranks a reco object one row below the particle it matched. The arrow
+                // is drawn at the source end and still points at the truth.
+                edges.push({
+                    data: {
+                        id: `match-${wp}-${object.id}`,
+                        source: best.node,
+                        target: object.id,
+                        isMatchEdge: true,
+                        workingPoint: wp,
+                        matchScore: best.score,
+                        matchSharedEnergy: best.sharedEnergy
+                    }
+                });
+            });
+        });
+
+        return { nodes, edges, workingPoints };
+    },
+
+    /**
+     * Show the match edges of one working point and hide the others, so switching the
+     * point moves the match on the canvas.
+     */
+    setWorkingPoint(name) {
+        this.activeWorkingPoint = name;
+        if (!this.cy) return;
+
+        this.cy.edges('[isMatchEdge]').forEach((edge) => {
+            edge.toggleClass('inactive-match', edge.data('workingPoint') !== name);
+        });
+
+        const status = document.getElementById('working-point-status');
+        if (status) {
+            const shown = this.cy.edges('[isMatchEdge]').filter(e => e.data('workingPoint') === name).length;
+            status.textContent = `${shown} matched reco objects at ${name}.`;
+        }
+    },
+
+    // A node carries a truth classification when the preprocessing recognised the
+    // logical graph. Graphs without it keep the legacy GEN/SIM styling.
+    truthKind(ele) {
+        return String(ele.data('truthKind') || '').trim();
+    },
+
+    hasTruthClassification(ele) {
+        return this.truthKind(ele) !== '';
+    },
+
+    truthLevel(ele) {
+        const level = String(ele.data('truthLevel') || '').trim();
+        return level || 'none';
+    },
+
+    truthFootprint(ele) {
+        return String(ele.data('truthFootprint') || 'none').trim();
+    },
+
+    truthRole(ele) {
+        return String(ele.data('truthRole') || '').trim();
+    },
+
+    isTruthRoot(ele) {
+        return String(ele.data('isRoot') || '').trim() === '1';
+    },
+
+    isBackscattered(ele) {
+        return String(ele.data('backscattered') || '').trim() === '1';
+    },
+
+    hasCheckpoints(ele) {
+        const count = Number.parseInt(ele.data('nCheckpoints'), 10);
+        return Number.isFinite(count) && count > 0;
+    },
+
     isTruthyAttribute(value) {
         if (value === true || value === 1) return true;
         if (value === false || value === 0 || value === null || value === undefined) return false;
@@ -215,6 +455,13 @@ const GraphManager = {
     },
 
     getCompactLabelFromData(data) {
+        // A truth-classified node carries its own two-line label: the title, which
+        // is the particle name or the vertex reason, and a short second line.
+        if (data.truthKind) {
+            const title = this.htmlLabelToCanvasText(data.truthTitle || data.id);
+            return data.truthSubtitle ? `${title}\n${data.truthSubtitle}` : title;
+        }
+
         const dataAccessor = {
             id: () => data.id,
             data: key => data[key]
@@ -300,7 +547,27 @@ const GraphManager = {
         return String(ele.data('status')).trim() === '1';
     },
 
+    getTruthFillColor(ele) {
+        const kind = this.truthKind(ele);
+        if (kind === 'reco') {
+            return this.recoDomainColors[String(ele.data('recoDomain') || '')] || this.recoDomainColors.tracksters;
+        }
+        if (kind === 'artificial') {
+            return this.truthArtificialColors[this.truthRole(ele)] || this.truthArtificialColors.interaction;
+        }
+        if (kind === 'vertex') return this.truthVertexColor;
+        return this.truthLevelColors[this.truthLevel(ele)] || this.truthLevelColors.none;
+    },
+
+    getNodeTextColor(ele) {
+        if (this.truthKind(ele) === 'reco') return '#fff';
+        if (!this.hasTruthClassification(ele)) return '#000';
+        return this.truthLevelDarkFills.has(this.getTruthFillColor(ele)) ? '#fff' : '#000';
+    },
+
     getNodeFillColor(ele) {
+        if (this.hasTruthClassification(ele)) return this.getTruthFillColor(ele);
+
         if (this.hasStatusOne(ele)) return this.statusOneNodeColor;
 
         // The truth-graph dumper encodes detector region / role in the node fillcolor
@@ -329,6 +596,14 @@ const GraphManager = {
     },
 
     getNodeShape(ele) {
+        const truthKind = this.truthKind(ele);
+        if (truthKind === 'reco') return 'round-rectangle';
+        if (truthKind === 'artificial') {
+            return this.truthArtificialShapes[this.truthRole(ele)] || 'star';
+        }
+        if (truthKind === 'vertex') return 'diamond';
+        if (truthKind === 'particle') return 'ellipse';
+
         if (this.hasStatusOne(ele)) return 'rectangle';
 
         // Honour the producer's shape encoding (seed/muon/vertex kinds) when we can
@@ -353,6 +628,16 @@ const GraphManager = {
     },
 
     getNodeSize(ele) {
+        const truthKind = this.truthKind(ele);
+        if (truthKind === 'reco') return this.recoNodeSize;
+        if (truthKind === 'artificial') return this.truthArtificialNodeSize;
+        if (truthKind === 'vertex') return this.vertexNodeSize;
+        if (truthKind === 'particle') {
+            const particleId = this.getParticlePdgId(ele);
+            const scale = this.smallParticlePdgIds.has(particleId) ? 0.8 : 1;
+            return this.defaultNodeSize * scale;
+        }
+
         const type = this.getNodeKind(ele);
         if (type === 'GenEvent') return this.eventNodeSize;
         if (type === 'GenVertex' || type === 'SimVertex' || type === 'GenSimVertex' || type === 'LogicalVertex') return this.vertexNodeSize;
@@ -366,7 +651,24 @@ const GraphManager = {
         return this.defaultNodeSize;
     },
 
+    // Particles and reco objects carry their text inside the node, so they are wider
+    // than tall; vertices keep their label below the diamond and stay square.
+    getNodeWidth(ele) {
+        const size = this.getNodeSize(ele);
+        const truthKind = this.truthKind(ele);
+        if (truthKind === 'particle') return size * 1.8;
+        if (truthKind === 'reco') return size * 2.3;
+        if (truthKind === 'vertex' || truthKind === 'artificial') return size;
+        return this.isParticleNode(ele) ? size * 1.8 : size;
+    },
+
     getNodeFontSize(ele) {
+        const truthKind = this.truthKind(ele);
+        if (truthKind === 'reco') return 10;
+        if (truthKind === 'artificial') return 11;
+        if (truthKind === 'vertex') return 8;
+        if (truthKind === 'particle') return 14;
+
         const type = this.getNodeKind(ele);
         if (type === 'GenVertex' || type === 'SimVertex' || type === 'GenSimVertex' || type === 'LogicalVertex' || this.isLogicalVertex(ele)) {
             return 10;
@@ -375,6 +677,12 @@ const GraphManager = {
     },
 
     getNodeBorderColor(ele) {
+        if (this.hasTruthClassification(ele)) {
+            if (this.isBackscattered(ele)) return this.truthMarkerColors.backscattered;
+            if (this.hasCheckpoints(ele)) return this.truthMarkerColors.checkpoints;
+            return this.truthMarkerColors.plain;
+        }
+
         if (this.hasCrossedBoundary(ele)) return '#e804ec';
 
         // Honour the producer's border colour (the dumper outlines seeds in gold,
@@ -384,6 +692,11 @@ const GraphManager = {
     },
 
     getNodeBorderWidth(ele) {
+        if (this.hasTruthClassification(ele)) {
+            if (this.truthKind(ele) !== 'particle') return 1;
+            return this.truthFootprintBorderWidths[this.truthFootprint(ele)] ?? 1;
+        }
+
         if (this.hasCrossedBoundary(ele)) return 3;
 
         // Honour the producer's penwidth so seeds (penwidth 3) and muons stand out.
@@ -400,7 +713,15 @@ const GraphManager = {
     init(data) {
         console.log('Initializing graph with', data.nodes.length, 'nodes and', data.edges.length, 'edges');
         this.graphName = data.metadata?.graph_name || data.graph_name || '';
+        this._simHitInformation = undefined;
+        this.updateLegend();
         this.registerLayoutExtensions();
+
+        // Reco overlay, when the job also produced the associations.
+        const truthNodeIds = new Set(data.nodes.map(n => n.id));
+        const reco = this.buildRecoElements(window.associationData, truthNodeIds);
+        this.workingPoints = reco.workingPoints;
+        this.activeWorkingPoint = reco.workingPoints[0] || '';
 
         // Convert data to Cytoscape format
         const elements = {
@@ -410,15 +731,17 @@ const GraphManager = {
                     ...n,
                     label: this.getCompactLabelFromData(n)
                 }
-            })),
-            edges: data.edges.map(e => ({
+            })).concat(reco.nodes.map(n => ({
+                data: { ...n.data, label: this.getCompactLabelFromData(n.data) }
+            }))),
+            edges: reco.edges.concat(data.edges.map(e => ({
                 data: {
                     id: `${e.source}-${e.target}`,
                     source: e.source,
                     target: e.target,
                     ...e
                 }
-            }))
+            })))
         };
 
         // Initialize Cytoscape
@@ -433,19 +756,29 @@ const GraphManager = {
                     style: {
                         'padding': 2,
                         'label': 'data(label)',
-                        'text-valign': 'center',
+                        'text-valign': function(ele) {
+                            return GraphManager.truthKind(ele) === 'vertex' ? 'bottom' : 'center';
+                        },
                         'text-halign': 'center',
+                        'text-margin-y': function(ele) {
+                            return GraphManager.truthKind(ele) === 'vertex' ? 3 : 0;
+                        },
                         'font-size': function(ele) {
                             return GraphManager.getNodeFontSize(ele);
                         },
                         'font-weight': 600,
                         'text-wrap': 'wrap',
                         'text-max-width': function(ele) {
-                            const size = GraphManager.getNodeSize(ele);
-                            return Number.isFinite(size) ? Math.max(22, size - 4) : 80;
+                            // The vertex four-position needs one line, not the width
+                            // of the diamond it sits under.
+                            if (GraphManager.truthKind(ele) === 'vertex') return 190;
+                            const width = GraphManager.getNodeWidth(ele);
+                            return Number.isFinite(width) ? Math.max(22, width - 4) : 80;
                         },
-                        'line-height': 1,
-                        'color': '#000',
+                        'line-height': 1.1,
+                        'color': function(ele) {
+                            return GraphManager.getNodeTextColor(ele);
+                        },
                         'text-background-opacity': 0,
                         'text-background-padding': 0,
                         'text-background-shape': 'roundrectangle',
@@ -462,12 +795,18 @@ const GraphManager = {
                             return GraphManager.getNodeShape(ele);
                         },
                         'width': function(ele) {
-                            return GraphManager.getNodeSize(ele);
+                            return GraphManager.getNodeWidth(ele);
                         },
                         'height': function(ele) {
                             return GraphManager.getNodeSize(ele);
                         },
                         'border-style': function(ele) {
+                            if (GraphManager.hasTruthClassification(ele)) {
+                                if (GraphManager.isTruthRoot(ele)) return 'double';
+                                if (GraphManager.truthKind(ele) === 'particle'
+                                    && GraphManager.truthFootprint(ele) === 'none') return 'dashed';
+                                return 'solid';
+                            }
                             if (GraphManager.hasCrossedBoundary(ele)) return 'double';
                             // Evoke the producer's doublecircle seed marker.
                             if (GraphManager.isSeedNode(ele)) return 'double';
@@ -587,6 +926,30 @@ const GraphManager = {
                 },
                 {
                     selector: 'edge.small-subgraph-filtered',
+                    style: {
+                        'display': 'none'
+                    }
+                },
+                {
+                    selector: 'edge[isMatchEdge]',
+                    style: {
+                        'line-style': 'dashed',
+                        'line-color': '#0d7d8c',
+                        'source-arrow-color': '#0d7d8c',
+                        'source-arrow-shape': 'triangle',
+                        'target-arrow-shape': 'none',
+                        'curve-style': 'bezier',
+                        'width': function(ele) {
+                            const shared = Number.parseFloat(ele.data('matchSharedEnergy'));
+                            if (!Number.isFinite(shared) || shared <= 0) return 1.5;
+                            return Math.min(7, 1.5 + Math.sqrt(shared) * 12);
+                        },
+                        'opacity': 0.95,
+                        'z-index': 20
+                    }
+                },
+                {
+                    selector: 'edge.inactive-match',
                     style: {
                         'display': 'none'
                     }
@@ -774,10 +1137,10 @@ const GraphManager = {
                 animate: false,
                 rankDir: 'TB',
                 ranker: 'network-simplex',
-                nodeSep: 20,
-                edgeSep: 5,
-                rankSep: 80,
-                spacingFactor: 0.9,
+                nodeSep: 45,
+                edgeSep: 10,
+                rankSep: 90,
+                spacingFactor: 1.0,
                 fit: false,
                 padding: 30,
                 edgeWeight: edge => this.getDagreEdgeWeight(edge)
@@ -827,19 +1190,24 @@ const GraphManager = {
             this.cy.container().style.cursor = '';
         });
 
-        // Node hover - show tooltip
+        // Node hover - expand the two-line label into the full summary
         this.cy.on('mouseover', 'node', (evt) => {
             const node = evt.target;
-            const tooltip = node.data('tooltip');
-            if (tooltip) {
-                node.style('text-background-color', 'rgba(255, 255, 255, 0.9)');
-            }
+            node.style('text-background-color', 'rgba(255, 255, 255, 0.9)');
+            this.showNodeTooltip(node, evt.renderedPosition);
+        });
+
+        this.cy.on('mousemove', 'node', (evt) => {
+            this.moveNodeTooltip(evt.renderedPosition);
         });
 
         this.cy.on('mouseout', 'node', (evt) => {
             const node = evt.target;
             node.style('text-background-color', 'rgba(255, 255, 255, 0.7)');
+            this.hideNodeTooltip();
         });
+
+        this.cy.on('pan zoom', () => this.hideNodeTooltip());
 
         // Background click - clear selection
         this.cy.on('tap', (evt) => {
@@ -850,9 +1218,259 @@ const GraphManager = {
     },
 
     /**
+     * Show the legend that matches the loaded graph. The logical truth graph is
+     * standalone, so its legend replaces the GEN/SIM one rather than adding to it.
+     */
+    updateLegend() {
+        const truthLegend = document.getElementById('legend-truth');
+        const genSimLegend = document.getElementById('legend-gensim');
+        if (!truthLegend || !genSimLegend) return;
+
+        const isTruth = this.isLogicalGraph();
+        truthLegend.classList.toggle('hidden', !isTruth);
+        genSimLegend.classList.toggle('hidden', isTruth);
+
+        // The GEN/SIM view options have no meaning in the standalone truth graph,
+        // and the truth filters have none in the raw one.
+        document.querySelectorAll('.gensim-only').forEach((element) => {
+            element.classList.toggle('hidden', isTruth);
+        });
+        document.querySelectorAll('.truth-only').forEach((element) => {
+            element.classList.toggle('hidden', !isTruth);
+        });
+    },
+
+    /**
+     * Return the element that carries the hover summary, creating it on first use.
+     */
+    nodeTooltipElement() {
+        if (!this._nodeTooltip) {
+            const element = document.createElement('div');
+            element.id = 'node-tooltip';
+            element.className = 'hidden';
+            document.body.appendChild(element);
+            this._nodeTooltip = element;
+        }
+        return this._nodeTooltip;
+    },
+
+    /**
+     * Show the full node summary next to the cursor. The canvas label stays at
+     * two lines, so the rest of the truth information appears only on hover.
+     */
+    showNodeTooltip(node, renderedPosition) {
+        const text = node.data('truthHover') || node.data('tooltip') || node.data('detailLabel');
+        if (!text) return;
+
+        const element = this.nodeTooltipElement();
+        element.textContent = this.htmlLabelToCanvasText(text);
+        element.classList.remove('hidden');
+        this.moveNodeTooltip(renderedPosition);
+    },
+
+    moveNodeTooltip(renderedPosition) {
+        if (!this._nodeTooltip || this._nodeTooltip.classList.contains('hidden')) return;
+        if (!renderedPosition) return;
+
+        const container = this.cy.container().getBoundingClientRect();
+        const element = this._nodeTooltip;
+        const left = container.left + renderedPosition.x + 16;
+        const top = container.top + renderedPosition.y + 16;
+        const maxLeft = window.innerWidth - element.offsetWidth - 8;
+        const maxTop = window.innerHeight - element.offsetHeight - 8;
+
+        element.style.left = `${Math.max(8, Math.min(left, maxLeft))}px`;
+        element.style.top = `${Math.max(8, Math.min(top, maxTop))}px`;
+    },
+
+    hideNodeTooltip() {
+        if (this._nodeTooltip) this._nodeTooltip.classList.add('hidden');
+    },
+
+    /**
      * Setup graph-level view option controls.
      */
+    setupLegendToggle() {
+        const toggle = document.getElementById('legend-toggle');
+        const legend = document.getElementById('legend');
+        if (!toggle || !legend) return;
+
+        toggle.addEventListener('click', () => {
+            const collapsed = legend.classList.toggle('collapsed');
+            toggle.setAttribute('aria-expanded', String(!collapsed));
+        });
+    },
+
+    /**
+     * Build the level check list and wire every truth filter control.
+     */
+    setupTruthFilters() {
+        const pileup = document.getElementById('hide-pileup-checkbox');
+        if (pileup) {
+            pileup.checked = this.hidePileup;
+            pileup.addEventListener('change', () => this.setHidePileup(pileup.checked));
+        }
+
+        const underlyingEvent = document.getElementById('hide-underlying-event-checkbox');
+        if (underlyingEvent) {
+            underlyingEvent.checked = this.hideUnderlyingEvent;
+            underlyingEvent.addEventListener('change', () => this.setHideUnderlyingEvent(underlyingEvent.checked));
+        }
+
+        const zeroSimHits = document.getElementById('hide-zero-simhits-checkbox');
+        if (zeroSimHits) {
+            zeroSimHits.checked = this.hideZeroSimHitSubgraphs;
+            zeroSimHits.addEventListener('change', () => this.setHideZeroSimHitSubgraphs(zeroSimHits.checked));
+        }
+
+        const threshold = document.getElementById('energy-threshold-input');
+        if (threshold) {
+            threshold.value = String(this.energyThresholdGeV);
+            threshold.addEventListener('change', () => this.setEnergyThreshold(threshold.value));
+        }
+
+        const items = document.getElementById('level-filter-items');
+        if (!items) return;
+
+        items.innerHTML = '';
+        const levels = [...this.truthLevelOrder, 'none'];
+        levels.forEach((level) => {
+            const label = document.createElement('label');
+            label.className = 'checkbox-label level-filter-item';
+
+            const box = document.createElement('input');
+            box.type = 'checkbox';
+            box.checked = !this.hiddenTruthLevels.has(level);
+            box.dataset.level = level;
+            box.addEventListener('change', () => this.setTruthLevelVisible(level, box.checked));
+
+            const swatch = document.createElement('span');
+            swatch.className = 'level-filter-swatch';
+            swatch.style.background = this.truthLevelColors[level] || this.truthLevelColors.none;
+
+            label.appendChild(box);
+            label.appendChild(swatch);
+            label.appendChild(document.createTextNode(this.truthLevelLabels[level] || level));
+            items.appendChild(label);
+        });
+
+        const setAll = (visible) => {
+            items.querySelectorAll('input[type="checkbox"]').forEach((box) => { box.checked = visible; });
+            this.hiddenTruthLevels = visible ? new Set() : new Set(levels);
+            this.applyCollapsingFilters();
+            this.relayoutVisible();
+        };
+
+        const allButton = document.getElementById('level-filter-all');
+        if (allButton) allButton.addEventListener('click', () => setAll(true));
+        const noneButton = document.getElementById('level-filter-none');
+        if (noneButton) noneButton.addEventListener('click', () => setAll(false));
+    },
+
+    /**
+     * Fill the truth-level legend from the same vocabulary the filters use, so the
+     * two can never drift apart.
+     */
+    buildLevelLegend() {
+        const container = document.getElementById('legend-levels');
+        if (!container) return;
+
+        container.innerHTML = '';
+        [...this.truthLevelOrder, 'none'].forEach((level) => {
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+
+            const swatch = document.createElement('div');
+            swatch.className = 'legend-color';
+            swatch.style.background = this.truthLevelColors[level] || this.truthLevelColors.none;
+
+            const text = document.createElement('span');
+            text.textContent = this.truthLevelLabels[level] || level;
+
+            item.appendChild(swatch);
+            item.appendChild(text);
+            container.appendChild(item);
+        });
+    },
+
+    /**
+     * Let the control bar fold away, so the graph gets the whole window. The
+     * button stays visible, and H toggles it from the keyboard.
+     */
+    setupControlsToggle() {
+        const toggle = document.getElementById('controls-toggle');
+        const app = document.getElementById('app');
+        if (!toggle || !app) return;
+
+        const apply = () => {
+            const collapsed = app.classList.contains('controls-collapsed');
+            toggle.setAttribute('aria-expanded', String(!collapsed));
+            toggle.textContent = collapsed ? 'Show controls' : 'Hide controls';
+            if (this.cy) this.cy.resize();
+        };
+
+        toggle.addEventListener('click', () => {
+            app.classList.toggle('controls-collapsed');
+            apply();
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'h' && event.key !== 'H') return;
+            const target = event.target;
+            const tag = target && target.tagName ? target.tagName.toUpperCase() : '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            if (target && target.isContentEditable) return;
+
+            app.classList.toggle('controls-collapsed');
+            apply();
+        });
+
+        apply();
+    },
+
+    /**
+     * Build the working-point selector from what the association file carries, and
+     * apply the first point. Hidden when the job produced no associations.
+     */
+    setupWorkingPointControl() {
+        const container = document.getElementById('working-point-control');
+        if (!container) return;
+
+        if (this.workingPoints.length === 0) {
+            container.classList.add('hidden');
+            return;
+        }
+        container.classList.remove('hidden');
+
+        const items = document.getElementById('working-point-items');
+        items.innerHTML = '';
+        this.workingPoints.forEach((name) => {
+            const label = document.createElement('label');
+            label.className = 'checkbox-label';
+
+            const radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = 'working-point';
+            radio.value = name;
+            radio.checked = name === this.activeWorkingPoint;
+            radio.addEventListener('change', () => {
+                if (radio.checked) this.setWorkingPoint(name);
+            });
+
+            label.appendChild(radio);
+            label.appendChild(document.createTextNode(name));
+            items.appendChild(label);
+        });
+
+        this.setWorkingPoint(this.activeWorkingPoint);
+    },
+
     setupViewOptions() {
+        this.setupLegendToggle();
+        this.setupWorkingPointControl();
+        this.setupControlsToggle();
+        this.buildLevelLegend();
+        this.setupTruthFilters();
         const hideGenEventCheckbox = document.getElementById('hide-gen-event-checkbox');
         if (hideGenEventCheckbox) {
             hideGenEventCheckbox.checked = this.hideGenEventNodes;
@@ -1003,21 +1621,200 @@ const GraphManager = {
     },
 
     applyPartonShowerFilter() {
+        this.applyCollapsingFilters();
+    },
+
+    /**
+     * Hide every node that a collapsing filter rejects, then join the visible
+     * parents of the hidden set to its visible children. All collapsing filters
+     * share one pass: run separately, each would bridge only around its own
+     * hidden nodes and could strand a node whose neighbours another filter hid.
+     */
+    applyCollapsingFilters() {
         this.cy.edges('[isPartonShowerBypass]').remove();
         this.cy.nodes().removeClass('parton-shower-filtered');
         this.cy.edges().removeClass('parton-shower-filtered');
 
-        if (!this.hidePartonShower) {
+        let hiddenNodes = this.cy.collection();
+
+        if (this.hidePartonShower) {
+            const partonShowerNodes = this.cy.nodes().filter(node => this.isPartonShowerNode(node));
+            hiddenNodes = hiddenNodes
+                .union(partonShowerNodes)
+                .union(this.getSingleChildParentVertices(partonShowerNodes));
+        }
+
+        if (this.hasActiveTruthFilter()) {
+            hiddenNodes = hiddenNodes.union(this.cy.nodes().filter(node => this.isTruthFiltered(node)));
+        }
+
+        if (hiddenNodes.length === 0) {
+            this.reportFilterState();
             return;
         }
 
-        const partonShowerNodes = this.cy.nodes().filter(node => this.isPartonShowerNode(node));
-        const parentVertices = this.getSingleChildParentVertices(partonShowerNodes);
-        const hiddenNodes = partonShowerNodes.union(parentVertices);
+        hiddenNodes = this.withDanglingVerticesHidden(hiddenNodes);
 
         hiddenNodes.addClass('parton-shower-filtered');
         hiddenNodes.connectedEdges().addClass('parton-shower-filtered');
         this.addPartonShowerBypassEdges(hiddenNodes);
+        this.reportFilterState();
+    },
+
+    /**
+     * Show how many nodes survive the filters, and warn when a filter cannot run.
+     */
+    reportFilterState() {
+        const status = document.getElementById('filter-status');
+        if (!status) return;
+
+        const total = this.cy.nodes().length;
+        const visible = this.cy.nodes().filter(node => !node.hasClass('parton-shower-filtered')).length;
+        const messages = [`Showing ${visible} of ${total} nodes.`];
+
+        if (this.hideZeroSimHitSubgraphs && !this.graphHasSimHitInformation()) {
+            messages.push('This graph carries no sim-hit counts, so the sim-hit filter is not applied.');
+        }
+
+        status.textContent = messages.join(' ');
+    },
+
+    /**
+     * Add to the hidden set every vertex that filtering has left dangling, and
+     * repeat until nothing more dangles, because hiding one vertex can strand the
+     * next. A vertex dangles when it once had parents and no visible node is
+     * reachable upstream of it, or it once had children and none is reachable
+     * downstream. Reachability is judged through the hidden nodes, the same walk
+     * the bypass edges follow, so a vertex whose daughters are hidden but whose
+     * grand-daughters are visible stays: the bypass reconnects it.
+     *
+     * The test is against what the node originally had, so a true source or sink
+     * of the graph is never removed and an unfiltered graph is left untouched.
+     */
+    withDanglingVerticesHidden(hiddenNodes) {
+        let hidden = hiddenNodes;
+        let hiddenIds = new Set(hidden.map(node => node.id()));
+
+        for (let pass = 0; pass < 100; pass++) {
+            const dangling = this.cy.nodes().filter((node) => {
+                if (hiddenIds.has(node.id())) return false;
+                const kind = this.truthKind(node);
+                if (kind !== 'vertex' && kind !== 'artificial') return false;
+
+                const hadParents = node.incomers('node').length > 0;
+                const hadChildren = node.outgoers('node').length > 0;
+
+                if (hadParents && this.getVisibleBoundaryNodes(node, 'in', hiddenIds).length === 0) return true;
+                if (hadChildren && this.getVisibleBoundaryNodes(node, 'out', hiddenIds).length === 0) return true;
+                return false;
+            });
+
+            if (dangling.length === 0) break;
+
+            hidden = hidden.union(dangling);
+            hiddenIds = new Set(hidden.map(node => node.id()));
+        }
+
+        return hidden;
+    },
+
+    /**
+     * Report whether the graph carries sim-hit counts at all. A DOT dumped without
+     * a hit index reports zero for every particle, and hiding on that would empty
+     * the view rather than drop the particles that leave nothing behind.
+     */
+    graphHasSimHitInformation() {
+        if (this._simHitInformation === undefined) {
+            this._simHitInformation = this.cy.nodes().some((node) => {
+                if (this.truthKind(node) !== 'particle') return false;
+                const simHits = Number.parseInt(node.data('truthSimHits'), 10);
+                return Number.isFinite(simHits) && simHits > 0;
+            });
+        }
+        return this._simHitInformation;
+    },
+
+    hasActiveTruthFilter() {
+        return this.hidePileup
+            || this.hideUnderlyingEvent
+            || this.hideZeroSimHitSubgraphs
+            || this.energyThresholdGeV > 0
+            || this.hiddenTruthLevels.size > 0;
+    },
+
+    /**
+     * Report whether a truth filter rejects this node. Vertices are judged only on
+     * provenance, so a vertex is never dropped for an energy or a level that it
+     * does not carry.
+     */
+    isTruthFiltered(node) {
+        if (!this.hasTruthClassification(node)) return false;
+        if (this.truthKind(node) === 'reco') return false;
+
+        if (this.hidePileup && String(node.data('truthPileup')) === '1') return true;
+
+        const kind = this.truthKind(node);
+        if (this.hideUnderlyingEvent) {
+            if (kind === 'artificial' && this.truthRole(node) === 'underlyingEvent') return true;
+            if (kind === 'particle' && this.truthLevelsOf(node).includes('underlyingEvent')) return true;
+        }
+
+        if (kind !== 'particle') return false;
+
+        if (this.hideZeroSimHitSubgraphs && this.graphHasSimHitInformation()) {
+            const simHits = Number.parseInt(node.data('truthSimHits'), 10);
+            if (Number.isFinite(simHits) && simHits === 0) return true;
+        }
+
+        if (this.energyThresholdGeV > 0) {
+            const energy = Number.parseFloat(node.data('truthEnergy'));
+            if (Number.isFinite(energy) && energy >= 0 && energy < this.energyThresholdGeV) return true;
+        }
+
+        if (this.hiddenTruthLevels.size > 0 && this.hiddenTruthLevels.has(this.truthLevel(node))) return true;
+
+        return false;
+    },
+
+    truthLevelsOf(node) {
+        const levels = node.data('truthLevels');
+        if (Array.isArray(levels)) return levels;
+        return String(levels || '').split(',').map(part => part.trim()).filter(Boolean);
+    },
+
+    setHidePileup(shouldHide) {
+        this.hidePileup = shouldHide;
+        this.applyCollapsingFilters();
+        this.relayoutVisible();
+    },
+
+    setHideUnderlyingEvent(shouldHide) {
+        this.hideUnderlyingEvent = shouldHide;
+        this.applyCollapsingFilters();
+        this.relayoutVisible();
+    },
+
+    setHideZeroSimHitSubgraphs(shouldHide) {
+        this.hideZeroSimHitSubgraphs = shouldHide;
+        this.applyCollapsingFilters();
+        this.relayoutVisible();
+    },
+
+    setEnergyThreshold(thresholdGeV) {
+        const value = Number.parseFloat(thresholdGeV);
+        this.energyThresholdGeV = Number.isFinite(value) && value > 0 ? value : 0;
+        this.applyCollapsingFilters();
+        this.relayoutVisible();
+    },
+
+    setTruthLevelVisible(level, visible) {
+        if (visible) {
+            this.hiddenTruthLevels.delete(level);
+        } else {
+            this.hiddenTruthLevels.add(level);
+        }
+        this.applyCollapsingFilters();
+        this.relayoutVisible();
     },
 
     isPartonShowerNode(node) {
@@ -1434,12 +2231,12 @@ const GraphManager = {
             options: {
                 rankdir: 'TB',
                 ranker: 'network-simplex',
-                nodesep: 20,
-                edgesep: 5,
-                ranksep: 80,
+                nodesep: 45,
+                edgesep: 10,
+                ranksep: 90,
                 marginx: 30,
                 marginy: 30,
-                spacingFactor: 0.9
+                spacingFactor: 1.0
             },
             nodes: visibleNodes.map(node => ({
                 id: node.id(),
@@ -1667,6 +2464,13 @@ const GraphManager = {
     },
 
     isEdgeVisibleForLayout(edge) {
+        // Only the first working point anchors reco objects in the layout: it is the
+        // calorimeter-entry match, so the adaptive edges of the other points climb from
+        // there to an ancestor without moving the reco node.
+        if (edge.data('isMatchEdge')) {
+            const anchor = Array.isArray(this.workingPoints) ? this.workingPoints[0] : null;
+            if (anchor && edge.data('workingPoint') !== anchor) return false;
+        }
         return !edge.hasClass('hidden')
             && !edge.hasClass('gen-event-filtered')
             && !edge.hasClass('sim-vertex-key0-filtered')

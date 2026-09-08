@@ -13,7 +13,7 @@ from truth_pipeline import PipelineOptions
 
 
 class TruthPipelineTests(unittest.TestCase):
-    def test_cmsrun_command_includes_one_event_and_skip_events(self):
+    def test_cmsrun_command_reads_up_to_the_requested_event(self):
         command = truth_pipeline.cmsrun_command(
             Path("/cmssw/src"),
             Path("/cmssw/src/PhysicsTools/TruthInfo/test/dumpTruthGraphsFromGENSIMRECO_cfg.py"),
@@ -24,8 +24,8 @@ class TruthPipelineTests(unittest.TestCase):
 
         self.assertIn("cmsRun", command)
         self.assertIn("file:/inputs/sample.root", command)
-        self.assertIn("-n 1", command)
-        self.assertIn("--skipEvents 7", command)
+        self.assertIn("-n 8", command)
+        self.assertNotIn("--skipEvents", command)
         self.assertIn("--no-keepSpectators -s 23", command)
 
     def test_find_single_newest_uses_event_suffixed_dot(self):

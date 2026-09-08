@@ -91,10 +91,44 @@ echo ""
 echo "Using DOT file: $DOT_FILE_ABS"
 echo ""
 
+# The app needs Python 3.9 or newer. The system python3 can be older.
+PYTHON_CANDIDATES="python3 python3.14 python3.13 python3.12 python3.11 python3.10 python3.9"
+
+select_python() {
+    local candidate
+    for candidate in "${TRUTHVIZ_PYTHON:-}" $PYTHON_CANDIDATES; do
+        [ -n "$candidate" ] || continue
+        command -v "$candidate" >/dev/null 2>&1 || continue
+        if "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+report_python_candidates() {
+    local candidate version
+    for candidate in $PYTHON_CANDIDATES; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            version="$("$candidate" -V 2>&1)"
+            echo "  $candidate: $version"
+        fi
+    done
+}
+
 # Check if virtual environment exists
 if [ ! -d "venv" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv venv
+    if ! PYTHON_BIN="$(select_python)"; then
+        echo "Error: no python3 of version 3.9 or newer was found."
+        echo "Interpreters on this machine:"
+        report_python_candidates
+        echo "Install one, for example 'sudo apt install python3-venv', or set"
+        echo "TRUTHVIZ_PYTHON to a suitable interpreter."
+        exit 1
+    fi
+    echo "Creating virtual environment with $PYTHON_BIN..."
+    "$PYTHON_BIN" -m venv venv
     echo "✓ Virtual environment created"
     echo ""
 fi
@@ -127,6 +161,12 @@ elif [ "$(cat "$BUNDLE_SOURCE_PATH")" != "$DOT_FILE_ABS" ]; then
 elif [ "$DOT_FILE_ABS" -nt "$BUNDLE_PATH" ]; then
     echo "Selected DOT file is newer than the bundle. Regenerating bundle..."
     should_build_bundle=true
+elif [ "preprocess/parse_graph.py" -nt "$BUNDLE_PATH" ] || [ "preprocess/build_bundle.py" -nt "$BUNDLE_PATH" ]; then
+    # The bundle records the fields the preprocessing knew about when it ran. After
+    # an update the DOT file is unchanged, so only the code timestamp reveals that
+    # the bundle is stale.
+    echo "Preprocessing is newer than the bundle. Regenerating bundle..."
+    should_build_bundle=true
 else
     echo "✓ Bundle is up to date"
 fi
@@ -144,6 +184,12 @@ if [ ! -f "app/js/bundle.js" ] || [ "data/bundle.json" -nt "app/js/bundle.js" ];
     echo "Generating bundle.js for static mode..."
     python preprocess/generate_bundle_js.py
     echo ""
+fi
+
+# Same for the associations, so a page opened as a file shows the reco objects too.
+if [ -f "data/associations.json" ] && { [ ! -f "app/js/associations.js" ] \
+        || [ "data/associations.json" -nt "app/js/associations.js" ]; }; then
+    python preprocess/generate_associations_js.py
 fi
 
 # Start server

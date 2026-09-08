@@ -48,7 +48,88 @@ The original bundle stays available as `window.bundleData`. View state is repres
 
 ## Node Semantics
 
-The frontend contains truth-graph-specific inference for:
+The viewer draws two different graphs and shows a different legend for each. The
+graph name in the bundle metadata selects which one.
+
+### TruthLogicalGraph
+
+The logical truth graph is standalone, so a node is described by its own truth
+level, its hit footprint and its role. GEN and SIM provenance is not used.
+`preprocess/parse_graph.py` stamps `truthKind`, `truthLevel`, `truthLevels`,
+`truthFootprint`, `truthRole`, `truthTitle`, `truthSubtitle` and `truthHover` on
+each node, and the frontend maps them onto the canvas:
+
+- Shape carries the node kind: ellipse for a particle, diamond for a vertex, and
+  star, pentagon or rounded rectangle for the three artificial vertices the
+  post-processor adds (`domain=Internal`, `role=interaction`, `ISR/upstream`,
+  `underlying event`).
+- Fill carries the dominant truth level, most signal-like first: `hardProcess`,
+  `partonJets`, `reconstructableFromSignal`, `stableLegsFromUpstream`,
+  `stableDecayProducts`, `caloBoundary`, `underlyingEvent`. A particle usually
+  carries several levels; the hover summary lists them all.
+- Border width carries the hit footprint: calo rec hits, calo sim hits only,
+  tracker or MTD or muon only, and no hits, which is drawn dashed.
+- Border style and colour carry the markers: a double ring for the root of a
+  selected branch, teal for checkpoints, orange for a backscattered particle.
+- The label holds two lines: the particle name or PDG id with its energy, or the
+  vertex reason with its four-position. The vertex label is drawn under the diamond,
+  because the four-position is much wider than the node. Hovering a node opens the
+  full summary, which carries the incoming and outgoing counts.
+
+The control bar folds away with its own button or with the H key, so the graph can
+use the whole window; the button stays over the canvas to bring it back. The legend
+collapses to its title bar, and it scrolls inside the graph container
+rather than growing under the controls bar. Its truth-level list is generated from
+the same vocabulary as the level filter, so the two cannot drift apart.
+
+A particle with no PDG identity is named by the producer, not by the PDG table: the
+dumper writes `connector` or `signal stand-in` into the first row of the HTML label
+rather than into an attribute, so the viewer reads the title from there and shows no
+energy for it.
+
+### Truth filters
+
+Four filters apply to the logical graph, in the view options:
+
+- Hide pile-up. Signal is bunch crossing 0 and event 0, which the producer encodes
+  as an eventId of 0, so any other value is pile-up. This mirrors
+  `truth::Branch::isFromPileup()`.
+- Hide underlying event. Drops particles carrying the `underlyingEvent` level and
+  the artificial underlying-event vertex.
+- Hide subgraphs with 0 sim hits. Drops a particle whose whole subgraph leaves no
+  sim hit in any channel, so it can never be reconstructed. It counts the subgraph,
+  not the particle itself, so it removes neutrinos and other dead branches and keeps
+  a parent whose daughters do leave hits. A DOT dumped without a hit index reports
+  zero for every particle; the filter detects that and refuses to run rather than
+  empty the view.
+- Hide particles below an energy threshold in GeV.
+- Levels shown. One entry per truth level plus one for a particle with no level. A
+  particle is judged on its dominant level, the same one that gives it its colour,
+  so the list is a partition rather than an overlapping set of tags.
+
+A line under the filters reports how many nodes survive them, and says when a
+filter cannot run.
+
+Hiding always collapses. Every collapsing filter, including the older parton-shower
+one, contributes to a single hidden set, and one pass then joins the visible parents
+of that set to its visible children. Running the filters as separate passes would
+let each bridge only around its own hidden nodes, which strands a node whose
+neighbours another filter hid.
+
+A vertex that filtering leaves dangling is hidden too, and the sweep repeats until
+nothing more dangles, because hiding one vertex can strand the next. A vertex
+dangles when it once had parents and no visible node is reachable upstream of it, or
+it once had children and none is reachable downstream. Reachability follows the same
+walk through hidden nodes that the bypass edges take, so a vertex whose daughters are
+hidden but whose grand-daughters are visible stays, reconnected by a bypass. The test
+is against what the node originally had, so a true source or sink of the graph is
+never removed and an unfiltered graph is left untouched. Hiding every level therefore
+empties the canvas: with no particle visible, no vertex has anything to join.
+
+### TruthGraph
+
+The raw gen plus sim graph keeps the earlier inference, because GEN and SIM
+provenance is still its subject:
 
 - `GenEvent`
 - `GenVertex`
