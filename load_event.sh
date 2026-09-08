@@ -41,7 +41,10 @@ if [ ! -x venv/bin/python ]; then
 fi
 
 echo "Loading $dir: $dot, event index $index in the rechit table"
+mkdir -p data
 cp "$dir/trackster_associations.json" data/associations.json
+printf '%s\n' "$dir" > data/.event.source
+rm -f app/js/associations.js app/js/rechits.js
 ./venv/bin/python preprocess/build_rechits_json.py "$dir/rechits_nano.root" data/rechits.json \
     --event-index "$index" >/dev/null
 ./run.sh --dot "$dir/$dot"

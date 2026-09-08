@@ -7,14 +7,16 @@ environment, so do it before the talk.
 ## Once, with network
 
 ```bash
-git clone -b local-run https://github.com/felicepantaleo/CMSSWTruthViz.git
+git clone https://github.com/felicepantaleo/CMSSWTruthViz.git
 cd CMSSWTruthViz
-./run.sh --dot demo/z_ee/truthlogicalgraph_run1_lumi1_event3.dot
+./load_event.sh demo/z_ee
 ```
 
-The first `run.sh` creates `venv/` and installs `pydot`, `networkx`, `particle` and
-`uproot`. It then builds the graph bundle and starts the server, which prints its URL,
-normally <http://localhost:8009/app/>. Open it once and check that the graph appears.
+The first run creates `venv/` and installs `pydot`, `networkx`, `particle` and `uproot`.
+It then loads the event and starts the server, which prints its URL, normally
+<http://localhost:8009/app/>. Open it and check three things: the graph appears, the teal
+reco objects hang under the particles they matched, and clicking a node with hits and
+choosing `Direct hits` draws them in the 3D panel.
 
 Python 3.9 or newer is needed. On macOS `brew install python@3.12` gives one; the script
 picks the first suitable interpreter it finds.
@@ -28,6 +30,9 @@ picks the first suitable interpreter it finds.
 
 `load_event.sh` copies the associations of that event, builds its rechit table and starts
 the server on the graph. Stop it with Ctrl-C before loading another event.
+
+`./run.sh --dot demo/<event>/truthlogicalgraph_*.dot` works too: when the DOT sits in a
+prepared folder it loads that event's associations and rechit table by itself.
 
 Nothing is fetched from the internet: the libraries come from `app/vendor`, the data from
 `demo/`. An unstable connection cannot break the demo.

@@ -148,6 +148,27 @@ else
 fi
 echo ""
 
+# When the DOT comes from a prepared event folder, load the associations and the rechit
+# table of that same event, so the reco objects and the 3D panel are there as well.
+EVENT_DIR="$(dirname "$DOT_FILE_ABS")"
+EVENT_SOURCE_PATH="data/.event.source"
+if [ -f "$EVENT_DIR/event.json" ] && [ -f "$EVENT_DIR/trackster_associations.json" ]; then
+    mkdir -p data
+    if [ ! -f "$EVENT_SOURCE_PATH" ] || [ "$(cat "$EVENT_SOURCE_PATH")" != "$EVENT_DIR" ] \
+            || [ ! -f data/associations.json ]; then
+        echo "Loading the associations and the rechits of $(basename "$EVENT_DIR")..."
+        cp "$EVENT_DIR/trackster_associations.json" data/associations.json
+        if [ -f "$EVENT_DIR/rechits_nano.root" ]; then
+            event_index=$(python -c "import json; print(json.load(open('$EVENT_DIR/event.json'))['eventIndex'])")
+            python preprocess/build_rechits_json.py "$EVENT_DIR/rechits_nano.root" \
+                data/rechits.json --event-index "$event_index" > /dev/null
+        fi
+        printf '%s\n' "$EVENT_DIR" > "$EVENT_SOURCE_PATH"
+        rm -f app/js/associations.js app/js/rechits.js
+        echo ""
+    fi
+fi
+
 should_build_bundle=false
 if [ ! -f "$BUNDLE_PATH" ]; then
     echo "Bundle not found. Generating from selected DOT file..."
@@ -190,6 +211,17 @@ fi
 if [ -f "data/associations.json" ] && { [ ! -f "app/js/associations.js" ] \
         || [ "data/associations.json" -nt "app/js/associations.js" ]; }; then
     python preprocess/generate_associations_js.py
+fi
+
+if [ -f "data/rechits.json" ] && { [ ! -f "app/js/rechits.js" ] \
+        || [ "data/rechits.json" -nt "app/js/rechits.js" ]; }; then
+    python -c "
+import json, sys
+sys.path.insert(0, 'preprocess')
+from build_rechits_json import write_js
+write_js(json.load(open('data/rechits.json')), __import__('pathlib').Path('app/js/rechits.js'))
+print('Wrote app/js/rechits.js')
+"
 fi
 
 # Start server

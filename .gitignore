@@ -30,6 +30,8 @@ data/.bundle.source
 data/cmssw/
 data/jobs/
 data/rechits.json
+data/.event.source
+!data/.gitkeep
 app/js/bundle.js
 app/js/rechits.js
 app/js/associations.js
