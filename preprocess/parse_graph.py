@@ -298,16 +298,15 @@ def truth_classification(node_id, attrs):
 
     if not is_particle_node(node_id, data_attrs, shape):
         reason = str(data_attrs.get("reason", "") or "").strip()
-        if reason and reason != "Unknown":
-            title = reason
-        elif str(data_attrs.get("isSource", "")).strip() == "1":
-            title = "source"
-        elif str(data_attrs.get("isSink", "")).strip() == "1":
-            title = "sink"
-        else:
-            title = "vertex"
         in_count = parse_count(data_attrs.get("nIn"))
         out_count = parse_count(data_attrs.get("nOut"))
+        # The same title the dumper writes in the first row of the DOT label. The
+        # reason comes from the Geant4 process, so a GEN-only vertex has none and
+        # the topology names it: one incoming particle decays, more produce.
+        if reason and reason != "Unknown":
+            title = reason
+        else:
+            title = "decay" if in_count == 1 else "production"
         hover = [title, f"{in_count} in, {out_count} out"]
         x4 = str(data_attrs.get("x4", "") or "").strip()
         if x4:

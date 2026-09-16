@@ -72,7 +72,10 @@ each node, and the frontend maps them onto the canvas:
 - Border style and colour carry the markers: a double ring for the root of a
   selected branch, teal for checkpoints, orange for a backscattered particle.
 - The label holds two lines: the particle name or PDG id with its energy, or the
-  vertex reason with its four-position. The vertex label is drawn under the diamond,
+  vertex title with its position. The vertex title is the same one the dumper writes
+  in the first row of the DOT label: the vertex reason, which comes from the Geant4
+  process and is therefore empty for a GEN-only vertex, and then the topology,
+  `decay` for one incoming particle and `production` for more. The vertex label is drawn under the diamond,
   because the four-position is much wider than the node. Hovering a node opens the
   full summary, which carries the incoming and outgoing counts.
 
