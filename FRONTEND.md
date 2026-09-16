@@ -174,6 +174,11 @@ node before and 4 after, in 0.2 s. With Dagre, which minimises crossings itself,
 takes the z_ee event from 15 crossings to 5 and the ttbar event from 133 to 128. No two
 node boxes overlap in any of these runs.
 
+Every filter collapses in one pass: the visible parents of the hidden nodes are joined
+to their visible children, so no node is left without an edge. The GenEvent filter and
+the SimVertex key=0 filter belong to the raw GEN/SIM graph and do not run on the logical
+truth graph, where key=0 is an ordinary SimVertex that can carry a real decay.
+
 Default visibility filters can hide:
 
 - GenEvent nodes.

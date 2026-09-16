@@ -865,18 +865,6 @@ const GraphManager = {
                     }
                 },
                 {
-                    selector: 'node.gen-event-filtered',
-                    style: {
-                        'display': 'none'
-                    }
-                },
-                {
-                    selector: 'node.sim-vertex-key0-filtered',
-                    style: {
-                        'display': 'none'
-                    }
-                },
-                {
                     selector: 'node.parton-shower-filtered',
                     style: {
                         'display': 'none'
@@ -926,18 +914,6 @@ const GraphManager = {
                 // Hidden edge
                 {
                     selector: 'edge.hidden',
-                    style: {
-                        'display': 'none'
-                    }
-                },
-                {
-                    selector: 'edge.gen-event-filtered',
-                    style: {
-                        'display': 'none'
-                    }
-                },
-                {
-                    selector: 'edge.sim-vertex-key0-filtered',
                     style: {
                         'display': 'none'
                     }
@@ -1562,20 +1538,8 @@ const GraphManager = {
         this.relayoutVisible();
     },
 
-    /**
-     * Apply the GenEvent view filter without disturbing focus/dependency filters.
-     */
     applyGenEventFilter() {
-        this.cy.nodes().removeClass('gen-event-filtered');
-        this.cy.edges().removeClass('gen-event-filtered');
-
-        if (!this.hideGenEventNodes) {
-            return;
-        }
-
-        const genEventNodes = this.cy.nodes().filter(node => this.isGenEventNode(node));
-        genEventNodes.addClass('gen-event-filtered');
-        genEventNodes.connectedEdges().addClass('gen-event-filtered');
+        this.applyCollapsingFilters();
     },
 
     /**
@@ -1595,20 +1559,8 @@ const GraphManager = {
         this.relayoutVisible();
     },
 
-    /**
-     * Apply the SimVertex key=0 view filter without disturbing focus/dependency filters.
-     */
     applySimVertexKey0Filter() {
-        this.cy.nodes().removeClass('sim-vertex-key0-filtered');
-        this.cy.edges().removeClass('sim-vertex-key0-filtered');
-
-        if (!this.hideSimVertexKey0Node) {
-            return;
-        }
-
-        const simVertexKey0Nodes = this.cy.nodes().filter(node => this.isSimVertexKey0Node(node));
-        simVertexKey0Nodes.addClass('sim-vertex-key0-filtered');
-        simVertexKey0Nodes.connectedEdges().addClass('sim-vertex-key0-filtered');
+        this.applyCollapsingFilters();
     },
 
     /**
@@ -1645,6 +1597,18 @@ const GraphManager = {
         this.cy.edges().removeClass('parton-shower-filtered');
 
         let hiddenNodes = this.cy.collection();
+
+        // The GenEvent node and the SimVertex key=0 node belong to the raw GEN/SIM
+        // graph. In the logical truth graph key=0 is an ordinary SimVertex, and
+        // hiding it would drop a real decay vertex, so neither filter runs there.
+        if (!this.isLogicalGraph()) {
+            if (this.hideGenEventNodes) {
+                hiddenNodes = hiddenNodes.union(this.cy.nodes().filter(node => this.isGenEventNode(node)));
+            }
+            if (this.hideSimVertexKey0Node) {
+                hiddenNodes = hiddenNodes.union(this.cy.nodes().filter(node => this.isSimVertexKey0Node(node)));
+            }
+        }
 
         if (this.hidePartonShower) {
             const partonShowerNodes = this.cy.nodes().filter(node => this.isPartonShowerNode(node));
@@ -2880,8 +2844,6 @@ const GraphManager = {
 
     isNodeVisibleForLayout(node) {
         return !node.hasClass('hidden')
-            && !node.hasClass('gen-event-filtered')
-            && !node.hasClass('sim-vertex-key0-filtered')
             && !node.hasClass('parton-shower-filtered')
             && !node.hasClass('small-subgraph-filtered')
             && !node.hasClass('reco-filtered');
@@ -2896,8 +2858,6 @@ const GraphManager = {
             if (anchor && edge.data('workingPoint') !== anchor) return false;
         }
         return !edge.hasClass('hidden')
-            && !edge.hasClass('gen-event-filtered')
-            && !edge.hasClass('sim-vertex-key0-filtered')
             && !edge.hasClass('parton-shower-filtered')
             && !edge.hasClass('small-subgraph-filtered')
             && !edge.hasClass('reco-filtered')
