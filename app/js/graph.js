@@ -16,8 +16,9 @@ const GraphManager = {
     fcoseRegistered: false,
     elkRegistered: false,
     graphName: '',
-    hideGenEventNodes: true,
-    hideSimVertexKey0Node: true,
+    // Every filter starts off: the first view of a graph is the whole graph.
+    hideGenEventNodes: false,
+    hideSimVertexKey0Node: false,
     hidePartonShower: false,
     // Truth filters. Every one of them collapses: a hidden node's visible parents
     // are joined to its visible children, so nothing is ever orphaned.
@@ -28,7 +29,7 @@ const GraphManager = {
     hiddenTruthLevels: new Set(),
     // The reco overlay is shown or hidden on its own, apart from the truth filters.
     showRecoObjects: true,
-    hideSmallDisconnectedSubgraphs: true,
+    hideSmallDisconnectedSubgraphs: false,
     smallDisconnectedSubgraphNodeLimit: 10,
     nodeTypeColors: {
         gen: '#c1daf3',

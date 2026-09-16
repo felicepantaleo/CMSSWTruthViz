@@ -179,11 +179,12 @@ to their visible children, so no node is left without an edge. The GenEvent filt
 the SimVertex key=0 filter belong to the raw GEN/SIM graph and do not run on the logical
 truth graph, where key=0 is an ordinary SimVertex that can carry a real decay.
 
-Default visibility filters can hide:
+Every filter starts off, so the first view of a graph is the whole graph. The filters
+that can be switched on hide:
 
 - GenEvent nodes.
 - `SimVertex` nodes with `key=0`.
-- Parton-shower status-2 gluons, with bypass edges inserted client-side for continuity.
+- Parton-shower status-2 gluons.
 - Small disconnected components with fewer than 10 nodes.
 
 ## Search

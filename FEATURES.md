@@ -83,9 +83,9 @@ The link controls show directed context around the selected node:
 
 Depth controls how many link steps are followed.
 
-## Default Visibility Filters
+## Visibility Filters
 
-Header checkboxes can hide:
+Every filter starts off. Header checkboxes can hide:
 
 - GenEvent nodes.
 - `SimVertex` nodes with `key=0`.
