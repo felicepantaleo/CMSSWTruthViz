@@ -159,13 +159,20 @@ Layouts are run on currently visible nodes plus edges whose endpoints are visibl
 
 Every engine is given the drawn extent of a node, labels included, because a vertex
 carries its label under the diamond and a particle box is three times wider than a
-vertex box. When the layout ends, `separateOverlaps` opens up what is left: it pushes
-apart two node boxes that still overlap, and it steps a node aside when an edge runs
-across it. The node moves, never the edge, so the layout keeps the shape it computed.
-Measured on the ttbar demo event, 2566 nodes, fCoSE: 53 edges crossing a node with the
-old settings, 36 with the new ones, 4 after the pass, which takes 194 ms. On the z_ee
-event, 422 nodes, three runs: 19 to 23 before, 15 to 21 after the settings, 4 to 7
-after the pass. No two node boxes overlap in any of these runs.
+vertex box. When the layout ends, `tidyLayout` opens up the drawn view in two stages.
+`separateOverlaps` pushes apart two node boxes that still overlap and steps a node
+aside when an edge runs across it; the node moves, never the edge, so the layout keeps
+the shape it computed. `untangleEdges` then swaps two neighbouring nodes when that
+removes crossings, trying only the nodes that take part in one. A stage is kept only
+when the number of crossing edge pairs does not grow, so a layout that already orders
+its ranks is left as it is.
+
+Measured with fCoSE on the ttbar demo event, 2566 nodes and 2568 edges: 1945 crossing
+edge pairs before and 679 after, 51 edges crossing a node before and 20 after, in 2.4 s.
+On the z_ee event, 422 nodes: 69 crossing pairs before and 21 after, 16 edges crossing a
+node before and 4 after, in 0.2 s. With Dagre, which minimises crossings itself, the pass
+takes the z_ee event from 15 crossings to 5 and the ttbar event from 133 to 128. No two
+node boxes overlap in any of these runs.
 
 Default visibility filters can hide:
 

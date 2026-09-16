@@ -109,6 +109,10 @@ const GraphManager = {
     recoNodeSize: 46,
     // Space left between two drawn node boxes by the separation pass.
     nodeSeparationMargin: 12,
+    // Cell size of the grid the crossing search uses, and how many neighbours a
+    // node is tried against when the untangle pass looks for a swap.
+    crossingGridCell: 300,
+    untanglePartnerLimit: 10,
     recoDomainColors: {
         tracksters: '#0d7d8c',
         tracks: '#5b6ee1',
@@ -2306,7 +2310,7 @@ const GraphManager = {
             const positions = event.data?.positions || [];
             this.applyWorkerLayoutPositions(positions);
             if (this.canceledLayoutRunId !== runId) {
-                this.separateOverlaps();
+                this.tidyLayout();
                 this.fitVisible();
             }
             this.hideLayoutStatus();
@@ -2358,7 +2362,7 @@ const GraphManager = {
 
             this.activeLayout = null;
             if (this.canceledLayoutRunId !== runId) {
-                this.separateOverlaps();
+                this.tidyLayout();
                 this.fitVisible();
             }
             this.hideLayoutStatus();
@@ -2483,7 +2487,7 @@ const GraphManager = {
      * was given, but it draws every edge straight between two centres. Returns
      * how many pushes it applied.
      */
-    separateOverlaps(maxPasses = 6) {
+    separateOverlaps({ clearEdges = true, maxPasses = 6 } = {}) {
         const nodes = this.getVisibleNodes();
         if (nodes.length < 2) return 0;
 
@@ -2560,7 +2564,7 @@ const GraphManager = {
 
             // Node against edge. The node moves, not the edge, so the layout keeps
             // the shape it computed and only the node in the way steps aside.
-            edges.forEach((edge) => {
+            if (clearEdges) edges.forEach((edge) => {
                 const px = centreX(edge.source);
                 const py = centreY(edge.source);
                 const length = Math.hypot(centreX(edge.target) - px, centreY(edge.target) - py);
@@ -2612,6 +2616,259 @@ const GraphManager = {
         }
 
         return pushes;
+    },
+
+    /**
+     * The drawn edges, as straight segments between two node centres, which is
+     * how cytoscape draws them.
+     */
+    edgeSegments() {
+        return this.cy.edges().filter(edge => this.isEdgeVisibleForLayout(edge)).map((edge) => {
+            const source = edge.source().position();
+            const target = edge.target().position();
+            return {
+                sourceId: edge.source().id(),
+                targetId: edge.target().id(),
+                x1: source.x, y1: source.y, x2: target.x, y2: target.y
+            };
+        });
+    },
+
+    segmentsCross(a, b) {
+        if (a.sourceId === b.sourceId || a.sourceId === b.targetId
+            || a.targetId === b.sourceId || a.targetId === b.targetId) return false;
+
+        const side = (ax, ay, bx, by, cx, cy) => (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+        const d1 = side(a.x1, a.y1, a.x2, a.y2, b.x1, b.y1);
+        const d2 = side(a.x1, a.y1, a.x2, a.y2, b.x2, b.y2);
+        const d3 = side(b.x1, b.y1, b.x2, b.y2, a.x1, a.y1);
+        const d4 = side(b.x1, b.y1, b.x2, b.y2, a.x2, a.y2);
+        return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+    },
+
+    /**
+     * Bucket the segments by the cells they pass through, so a crossing is only
+     * looked for between segments that share a cell.
+     */
+    bucketSegments(segments, cell) {
+        const buckets = new Map();
+        segments.forEach((segment, index) => {
+            const length = Math.hypot(segment.x2 - segment.x1, segment.y2 - segment.y1) || 1;
+            const steps = Math.max(1, Math.ceil(length / (cell / 2)));
+            const seen = new Set();
+            for (let step = 0; step <= steps; step += 1) {
+                const ratio = step / steps;
+                const key = `${Math.floor((segment.x1 + (segment.x2 - segment.x1) * ratio) / cell)}:`
+                    + `${Math.floor((segment.y1 + (segment.y2 - segment.y1) * ratio) / cell)}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                const bucket = buckets.get(key);
+                if (bucket) bucket.push(index); else buckets.set(key, [index]);
+            }
+        });
+        return buckets;
+    },
+
+    /**
+     * How many pairs of drawn edges cross. Two edges that share an endpoint meet
+     * at a node by construction, so they do not count.
+     */
+    countEdgeCrossings(segments = this.edgeSegments()) {
+        const buckets = this.bucketSegments(segments, this.crossingGridCell);
+        const pairs = new Set();
+
+        buckets.forEach((bucket) => {
+            for (let i = 0; i < bucket.length; i += 1) {
+                for (let j = i + 1; j < bucket.length; j += 1) {
+                    const first = Math.min(bucket[i], bucket[j]);
+                    const second = Math.max(bucket[i], bucket[j]);
+                    const key = `${first}|${second}`;
+                    if (pairs.has(key)) continue;
+                    if (this.segmentsCross(segments[first], segments[second])) pairs.add(key);
+                }
+            }
+        });
+
+        return pairs.size;
+    },
+
+    /**
+     * Swap two neighbouring nodes when that removes more crossings than it adds.
+     * Only a node that takes part in a crossing is tried, and only against the
+     * nodes drawn near it, so the search stays local and short.
+     */
+    untangleEdges(maxPasses = 3) {
+        const nodes = this.getVisibleNodes();
+        if (nodes.length < 2) return 0;
+
+        const cell = this.crossingGridCell;
+        const positions = new Map(nodes.map(node => [node.id(), { x: node.position('x'), y: node.position('y') }]));
+        const edges = this.cy.edges().filter(edge => this.isEdgeVisibleForLayout(edge));
+
+        const incident = new Map();
+        edges.forEach((edge, index) => {
+            [edge.source().id(), edge.target().id()].forEach((id) => {
+                const list = incident.get(id);
+                if (list) list.push(index); else incident.set(id, [index]);
+            });
+        });
+
+        const segments = new Array(edges.length);
+        const rebuild = (index) => {
+            const edge = edges[index];
+            const source = positions.get(edge.source().id());
+            const target = positions.get(edge.target().id());
+            segments[index] = {
+                sourceId: edge.source().id(), targetId: edge.target().id(),
+                x1: source.x, y1: source.y, x2: target.x, y2: target.y
+            };
+        };
+        const cellKey = (position) => `${Math.floor(position.x / cell)}:${Math.floor(position.y / cell)}`;
+
+        let swaps = 0;
+
+        for (let pass = 0; pass < maxPasses; pass += 1) {
+            for (let index = 0; index < edges.length; index += 1) rebuild(index);
+            const buckets = this.bucketSegments(segments, cell);
+
+            const tangled = new Set();
+            buckets.forEach((bucket) => {
+                for (let i = 0; i < bucket.length; i += 1) {
+                    for (let j = i + 1; j < bucket.length; j += 1) {
+                        const a = segments[bucket[i]];
+                        const b = segments[bucket[j]];
+                        if (!this.segmentsCross(a, b)) continue;
+                        tangled.add(a.sourceId).add(a.targetId).add(b.sourceId).add(b.targetId);
+                    }
+                }
+            });
+            if (tangled.size === 0) break;
+
+            const nodeBuckets = new Map();
+            nodes.forEach((node) => {
+                const key = cellKey(positions.get(node.id()));
+                const bucket = nodeBuckets.get(key);
+                if (bucket) bucket.push(node); else nodeBuckets.set(key, [node]);
+            });
+
+            // The segments drawn in a cell and in the eight around it, kept per
+            // cell so a node pays for its neighbourhood only once.
+            const neighbourhoods = new Map();
+            const neighbourhood = (key) => {
+                const known = neighbourhoods.get(key);
+                if (known) return known;
+
+                const [column, row] = key.split(':').map(Number);
+                const found = new Set();
+                for (let dx = -1; dx <= 1; dx += 1) {
+                    for (let dy = -1; dy <= 1; dy += 1) {
+                        (buckets.get(`${column + dx}:${row + dy}`) || []).forEach(index => found.add(index));
+                    }
+                }
+                const list = [...found];
+                neighbourhoods.set(key, list);
+                return list;
+            };
+
+            let passSwaps = 0;
+
+            nodes.forEach((node) => {
+                if (!tangled.has(node.id())) return;
+
+                const own = incident.get(node.id()) || [];
+                if (own.length === 0) return;
+
+                const nodeKey = cellKey(positions.get(node.id()));
+                const partners = (nodeBuckets.get(nodeKey) || [])
+                    .filter(other => other !== node)
+                    .slice(0, this.untanglePartnerLimit);
+
+                partners.some((partner) => {
+                    const partnerEdges = incident.get(partner.id()) || [];
+                    const moved = own.concat(partnerEdges);
+                    const others = neighbourhood(nodeKey)
+                        .concat(neighbourhood(cellKey(positions.get(partner.id()))));
+
+                    // The swap moves these edges and no others, so only they are
+                    // rebuilt and the rest of the neighbourhood is read as it is.
+                    const crossings = () => {
+                        moved.forEach(rebuild);
+                        let total = 0;
+                        moved.forEach((index) => {
+                            const segment = segments[index];
+                            others.forEach((other) => {
+                                if (other === index) return;
+                                if (this.segmentsCross(segment, segments[other])) total += 1;
+                            });
+                        });
+                        return total;
+                    };
+
+                    const before = crossings();
+                    if (before === 0) return false;
+
+                    const here = positions.get(node.id());
+                    const there = positions.get(partner.id());
+                    positions.set(node.id(), there);
+                    positions.set(partner.id(), here);
+
+                    if (crossings() < before) {
+                        passSwaps += 1;
+                        return true;
+                    }
+
+                    positions.set(node.id(), here);
+                    positions.set(partner.id(), there);
+                    moved.forEach(rebuild);
+                    return false;
+                });
+            });
+
+            swaps += passSwaps;
+            if (passSwaps === 0) break;
+        }
+
+        if (swaps > 0) {
+            this.cy.batch(() => nodes.forEach(node => node.position(positions.get(node.id()))));
+        }
+
+        return swaps;
+    },
+
+    capturePositions() {
+        return this.cy.nodes().map(node => ({ node, x: node.position('x'), y: node.position('y') }));
+    },
+
+    restorePositions(saved) {
+        this.cy.batch(() => saved.forEach(item => item.node.position({ x: item.x, y: item.y })));
+    },
+
+    /**
+     * Tidy the drawn view when a layout ends. Each stage is kept only when it
+     * does not add edge crossings, so a layout that already orders its ranks,
+     * like dagre, is left as it is.
+     */
+    tidyLayout() {
+        if (!this.cy || this.getVisibleNodes().length < 2) return;
+
+        let crossings = this.countEdgeCrossings();
+
+        const stage = (run) => {
+            const saved = this.capturePositions();
+            run();
+            const after = this.countEdgeCrossings();
+            if (after > crossings) {
+                this.restorePositions(saved);
+                return;
+            }
+            crossings = after;
+        };
+
+        stage(() => this.separateOverlaps());
+        stage(() => {
+            this.untangleEdges();
+            this.separateOverlaps({ clearEdges: false });
+        });
     },
 
     /**
