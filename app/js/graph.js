@@ -107,6 +107,8 @@ const GraphManager = {
     // Reco overlay. A reco object is drawn as a rounded rectangle joined to the truth
     // node its association chose, and the working point decides which edge is shown.
     recoNodeSize: 46,
+    // Space left between two drawn node boxes by the separation pass.
+    nodeSeparationMargin: 12,
     recoDomainColors: {
         tracksters: '#0d7d8c',
         tracks: '#5b6ee1',
@@ -1070,66 +1072,34 @@ const GraphManager = {
         if (this.selectedLayoutEngine === 'fcose' && this.fcoseRegistered) {
             return {
                 name: 'fcose',
-                // animate: false,
-                // quality: 'proof',
-                // // randomize: false,
-                // fit: false,
-                // // padding: 30,
-                // // nodeRepulsion: 4500,
-                // // idealEdgeLength: 55,
-                // // edgeElasticity: 0.45,
-                // // gravity: 0.25,
-                // numIter: 8000
-
-                // "fast" config
                 quality: 'proof',
                 randomize: true,
-
                 animate: false,
                 fit: false,
                 padding: 40,
 
-                uniformNodeDimensions: true,
-                nodeDimensionsIncludeLabels: false,
+                // A particle box is three times wider than a vertex box, and a vertex
+                // draws its label under the diamond, so the force model must use the
+                // real size of each node and the size of its label.
+                uniformNodeDimensions: false,
+                nodeDimensionsIncludeLabels: true,
 
                 packComponents: true,
 
                 samplingType: true,
                 sampleSize: 50,
-                nodeSeparation: 500, // from 80
+                nodeSeparation: 500,
 
-                // Sort-of readable but lots of edge crossings
-                // nodeRepulsion: () => 8000,
-                // idealEdgeLength: () => 200,
-                // edgeElasticity: () => 0.3, // from 0.35
-                // gravity: 0.15,
-                // gravityRange: 3.8,
-
-                // also good
-                nodeRepulsion: () => 12000,
-                idealEdgeLength: () => 120,
+                nodeRepulsion: () => 20000,
+                idealEdgeLength: () => 150,
                 edgeElasticity: () => 0.2,
                 gravity: 0.05,
                 gravityRange: 4.5,
 
-                // The below are not that good, probably needs to have an adjustment bewteen vertex/particle 
-
-                // nodeRepulsion: () => 12000,
-                // idealEdgeLength: edge => edge.target().outgoers('node').length == 1 ? 90 : ((edge.target().outgoers('node').length == 2) ? 100 : 140),
-                // edgeElasticity: () => 0.2,
-                // gravity: 0.05,
-                // gravityRange: 4.5,
-
-                // nodeRepulsion: () => 12000000,
-                // idealEdgeLength: edge => edge.target().outgoers('node').length == 1 ? 1 : ((edge.target().outgoers('node').length == 2) ? 2 : 5), //  edge => Math.min(20+ 30*(-1+edge.target().outgoers('node').length), 80)
-                // edgeElasticity: edge => 1.* (edge.target().outgoers('node').length == 1 ? 0.5 :  ((edge.target().outgoers('node').length == 2) ? 0.6: 0.8)),
-                // gravity: 0.1,
-                // gravityRange: 3,
-
                 numIter: 30000,
                 tile: true,
-                tilingPaddingVertical: 12,
-                tilingPaddingHorizontal: 12
+                tilingPaddingVertical: 20,
+                tilingPaddingHorizontal: 20
             };
         }
 
@@ -1138,11 +1108,14 @@ const GraphManager = {
                 name: 'elk',
                 animate: false,
                 fit: false,
+                nodeDimensionsIncludeLabels: true,
                 elk: {
                     algorithm: 'layered',
                     'elk.direction': 'DOWN',
-                    'elk.layered.spacing.nodeNodeBetweenLayers': 5,
-                    'elk.spacing.nodeNode': 10,
+                    'elk.layered.spacing.nodeNodeBetweenLayers': 70,
+                    'elk.spacing.nodeNode': 40,
+                    'elk.spacing.edgeNode': 20,
+                    'elk.spacing.edgeEdge': 12,
                     'elk.edgeRouting': 'ORTHOGONAL'
 
                     // algorithm: 'stress', // Never ending.....
@@ -1159,6 +1132,7 @@ const GraphManager = {
             return {
                 name: 'dagre',
                 animate: false,
+                nodeDimensionsIncludeLabels: true,
                 rankDir: 'TB',
                 ranker: 'network-simplex',
                 nodeSep: 45,
@@ -2288,11 +2262,14 @@ const GraphManager = {
                 marginy: 30,
                 spacingFactor: 1.0
             },
-            nodes: visibleNodes.map(node => ({
-                id: node.id(),
-                width: Math.max(1, node.outerWidth()),
-                height: Math.max(1, node.outerHeight())
-            })),
+            nodes: visibleNodes.map(node => {
+                const box = node.boundingBox({ includeLabels: true, includeOverlays: false });
+                return {
+                    id: node.id(),
+                    width: Math.max(1, box.w),
+                    height: Math.max(1, box.h)
+                };
+            }),
             edges: visibleEdges.map(edge => ({
                 id: edge.id(),
                 source: edge.source().id(),
@@ -2329,6 +2306,7 @@ const GraphManager = {
             const positions = event.data?.positions || [];
             this.applyWorkerLayoutPositions(positions);
             if (this.canceledLayoutRunId !== runId) {
+                this.separateOverlaps();
                 this.fitVisible();
             }
             this.hideLayoutStatus();
@@ -2380,6 +2358,7 @@ const GraphManager = {
 
             this.activeLayout = null;
             if (this.canceledLayoutRunId !== runId) {
+                this.separateOverlaps();
                 this.fitVisible();
             }
             this.hideLayoutStatus();
@@ -2496,6 +2475,143 @@ const GraphManager = {
         if (this.selectedLayoutEngine === 'fcose') return 'fCoSE';
         if (this.selectedLayoutEngine === 'elk') return 'ELK';
         return 'Dagre';
+    },
+
+    /**
+     * Open up the drawn view after a layout: no two node boxes overlap, and no
+     * edge runs across a node it does not touch. A layout separates the boxes it
+     * was given, but it draws every edge straight between two centres. Returns
+     * how many pushes it applied.
+     */
+    separateOverlaps(maxPasses = 6) {
+        const nodes = this.getVisibleNodes();
+        if (nodes.length < 2) return 0;
+
+        const margin = this.nodeSeparationMargin / 2;
+        const items = nodes.map((node) => {
+            const box = node.boundingBox({ includeLabels: true, includeOverlays: false });
+            const position = node.position();
+            return {
+                node,
+                x: position.x,
+                y: position.y,
+                offsetX: (box.x1 + box.x2) / 2 - position.x,
+                offsetY: (box.y1 + box.y2) / 2 - position.y,
+                halfWidth: box.w / 2 + margin,
+                halfHeight: box.h / 2 + margin
+            };
+        });
+
+        const byId = new Map(items.map(item => [item.node.id(), item]));
+        const edges = this.cy.edges()
+            .filter(edge => this.isEdgeVisibleForLayout(edge))
+            .map(edge => ({ source: byId.get(edge.source().id()), target: byId.get(edge.target().id()) }))
+            .filter(edge => edge.source && edge.target && edge.source !== edge.target);
+
+        // A bucket grid keeps each pass close to linear: two boxes can only touch
+        // when they share a cell or sit in neighbouring ones, and an edge can only
+        // cross a box in a cell the edge passes through.
+        const cell = items.reduce((size, item) => Math.max(size, item.halfWidth * 2, item.halfHeight * 2), 40);
+        const centreX = item => item.x + item.offsetX;
+        const centreY = item => item.y + item.offsetY;
+        let pushes = 0;
+
+        for (let pass = 0; pass < maxPasses; pass += 1) {
+            const buckets = new Map();
+            items.forEach((item) => {
+                const key = `${Math.floor(centreX(item) / cell)}:${Math.floor(centreY(item) / cell)}`;
+                const bucket = buckets.get(key);
+                if (bucket) bucket.push(item); else buckets.set(key, [item]);
+            });
+
+            let passPushes = 0;
+
+            // Node against node.
+            buckets.forEach((bucket, key) => {
+                const [column, row] = key.split(':').map(Number);
+                let neighbours = [];
+                for (let dx = 0; dx <= 1; dx += 1) {
+                    for (let dy = -1; dy <= 1; dy += 1) {
+                        if (dx === 0 && dy < 0) continue;
+                        const other = buckets.get(`${column + dx}:${row + dy}`);
+                        if (other && other !== bucket) neighbours = neighbours.concat(other);
+                    }
+                }
+
+                bucket.forEach((a, index) => {
+                    bucket.slice(index + 1).concat(neighbours).forEach((b) => {
+                        const gapX = (a.halfWidth + b.halfWidth) - Math.abs(centreX(a) - centreX(b));
+                        const gapY = (a.halfHeight + b.halfHeight) - Math.abs(centreY(a) - centreY(b));
+                        if (gapX <= 0 || gapY <= 0) return;
+
+                        passPushes += 1;
+                        if (gapX < gapY) {
+                            const shift = (gapX / 2) * (centreX(a) <= centreX(b) ? -1 : 1);
+                            a.x += shift;
+                            b.x -= shift;
+                        } else {
+                            const shift = (gapY / 2) * (centreY(a) <= centreY(b) ? -1 : 1);
+                            a.y += shift;
+                            b.y -= shift;
+                        }
+                    });
+                });
+            });
+
+            // Node against edge. The node moves, not the edge, so the layout keeps
+            // the shape it computed and only the node in the way steps aside.
+            edges.forEach((edge) => {
+                const px = centreX(edge.source);
+                const py = centreY(edge.source);
+                const length = Math.hypot(centreX(edge.target) - px, centreY(edge.target) - py);
+                if (length < 1) return;
+
+                const ux = (centreX(edge.target) - px) / length;
+                const uy = (centreY(edge.target) - py) / length;
+                const nx = -uy;
+                const ny = ux;
+
+                const seen = new Set();
+                for (let step = 0; step <= length; step += cell / 2) {
+                    const column = Math.floor((px + ux * step) / cell);
+                    const row = Math.floor((py + uy * step) / cell);
+                    for (let dx = -1; dx <= 1; dx += 1) {
+                        for (let dy = -1; dy <= 1; dy += 1) {
+                            const key = `${column + dx}:${row + dy}`;
+                            if (seen.has(key)) continue;
+                            seen.add(key);
+                            (buckets.get(key) || []).forEach((item) => {
+                                if (item === edge.source || item === edge.target) return;
+
+                                const along = (centreX(item) - px) * ux + (centreY(item) - py) * uy;
+                                if (along <= 0 || along >= length) return;
+
+                                const across = (centreX(item) - px) * nx + (centreY(item) - py) * ny;
+                                const half = item.halfWidth * Math.abs(nx) + item.halfHeight * Math.abs(ny);
+                                const needed = half - Math.abs(across);
+                                if (needed <= 0) return;
+
+                                passPushes += 1;
+                                const direction = across < 0 ? -1 : 1;
+                                item.x += nx * needed * direction;
+                                item.y += ny * needed * direction;
+                            });
+                        }
+                    }
+                }
+            });
+
+            pushes += passPushes;
+            if (passPushes === 0) break;
+        }
+
+        if (pushes > 0) {
+            this.cy.batch(() => {
+                items.forEach(item => item.node.position({ x: item.x, y: item.y }));
+            });
+        }
+
+        return pushes;
     },
 
     /**

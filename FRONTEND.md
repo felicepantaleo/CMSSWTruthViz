@@ -80,7 +80,8 @@ each node, and the frontend maps them onto the canvas:
   full summary, which carries the incoming and outgoing counts.
 
 The control bar folds away with its own button or with the H key, so the graph can
-use the whole window; the button stays over the canvas to bring it back. The legend
+use the whole window; the button stays over the canvas to bring it back, and the
+search box stays with it, over the canvas at the top left. The legend
 collapses to its title bar, and it scrolls inside the graph container
 rather than growing under the controls bar. Its truth-level list is generated from
 the same vocabulary as the level filter, so the two cannot drift apart.
@@ -155,6 +156,16 @@ The layout selector currently offers:
 - ELK: layered layout with orthogonal edge routing.
 
 Layouts are run on currently visible nodes plus edges whose endpoints are visible. A running layout shows a status pill and can be cancelled when the underlying layout engine supports `stop()`.
+
+Every engine is given the drawn extent of a node, labels included, because a vertex
+carries its label under the diamond and a particle box is three times wider than a
+vertex box. When the layout ends, `separateOverlaps` opens up what is left: it pushes
+apart two node boxes that still overlap, and it steps a node aside when an edge runs
+across it. The node moves, never the edge, so the layout keeps the shape it computed.
+Measured on the ttbar demo event, 2566 nodes, fCoSE: 53 edges crossing a node with the
+old settings, 36 with the new ones, 4 after the pass, which takes 194 ms. On the z_ee
+event, 422 nodes, three runs: 19 to 23 before, 15 to 21 after the settings, 4 to 7
+after the pass. No two node boxes overlap in any of these runs.
 
 Default visibility filters can hide:
 
