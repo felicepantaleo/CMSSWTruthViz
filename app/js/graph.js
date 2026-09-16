@@ -26,6 +26,8 @@ const GraphManager = {
     hideZeroSimHitSubgraphs: false,
     energyThresholdGeV: 0,
     hiddenTruthLevels: new Set(),
+    // The reco overlay is shown or hidden on its own, apart from the truth filters.
+    showRecoObjects: true,
     hideSmallDisconnectedSubgraphs: true,
     smallDisconnectedSubgraphNodeLimit: 10,
     nodeTypeColors: {
@@ -348,11 +350,21 @@ const GraphManager = {
             edge.toggleClass('inactive-match', edge.data('workingPoint') !== name);
         });
 
+        this.setWorkingPointStatus();
+    },
+
+    setWorkingPointStatus() {
         const status = document.getElementById('working-point-status');
-        if (status) {
-            const shown = this.cy.edges('[isMatchEdge]').filter(e => e.data('workingPoint') === name).length;
-            status.textContent = `${shown} matched reco objects at ${name}.`;
+        if (!status || !this.cy) return;
+
+        if (!this.showRecoObjects) {
+            status.textContent = 'Reco objects are hidden.';
+            return;
         }
+
+        const name = this.activeWorkingPoint;
+        const shown = this.cy.edges('[isMatchEdge]').filter(e => e.data('workingPoint') === name).length;
+        status.textContent = `${shown} matched reco objects at ${name}.`;
     },
 
     // A node carries a truth classification when the preprocessing recognised the
@@ -870,6 +882,12 @@ const GraphManager = {
                         'display': 'none'
                     }
                 },
+                {
+                    selector: 'node.reco-filtered',
+                    style: {
+                        'display': 'none'
+                    }
+                },
                 // Edge styles
                 {
                     selector: 'edge',
@@ -926,6 +944,12 @@ const GraphManager = {
                 },
                 {
                     selector: 'edge.small-subgraph-filtered',
+                    style: {
+                        'display': 'none'
+                    }
+                },
+                {
+                    selector: 'edge.reco-filtered',
                     style: {
                         'display': 'none'
                     }
@@ -1442,6 +1466,12 @@ const GraphManager = {
         }
         container.classList.remove('hidden');
 
+        const showReco = document.getElementById('show-reco-checkbox');
+        if (showReco) {
+            showReco.checked = this.showRecoObjects;
+            showReco.onchange = () => this.setShowRecoObjects(showReco.checked);
+        }
+
         const items = document.getElementById('working-point-items');
         items.innerHTML = '';
         this.workingPoints.forEach((name) => {
@@ -1462,6 +1492,7 @@ const GraphManager = {
             items.appendChild(label);
         });
 
+        this.applyRecoFilter();
         this.setWorkingPoint(this.activeWorkingPoint);
     },
 
@@ -1669,7 +1700,7 @@ const GraphManager = {
         if (!status) return;
 
         const total = this.cy.nodes().length;
-        const visible = this.cy.nodes().filter(node => !node.hasClass('parton-shower-filtered')).length;
+        const visible = this.getVisibleNodes().length;
         const messages = [`Showing ${visible} of ${total} nodes.`];
 
         if (this.hideZeroSimHitSubgraphs && !this.graphHasSimHitInformation()) {
@@ -1798,6 +1829,25 @@ const GraphManager = {
         this.hideZeroSimHitSubgraphs = shouldHide;
         this.applyCollapsingFilters();
         this.relayoutVisible();
+    },
+
+    setShowRecoObjects(shouldShow) {
+        this.showRecoObjects = shouldShow;
+        this.applyRecoFilter();
+        this.relayoutVisible();
+    },
+
+    /**
+     * Show or hide the reco overlay. A reco object is only ever the target of a
+     * match edge, so hiding it strands no truth node and needs no bypass edge.
+     */
+    applyRecoFilter() {
+        if (!this.cy) return;
+
+        const hide = !this.showRecoObjects;
+        this.cy.nodes().filter(node => this.truthKind(node) === 'reco').toggleClass('reco-filtered', hide);
+        this.cy.edges('[isMatchEdge]').toggleClass('reco-filtered', hide);
+        this.setWorkingPointStatus();
     },
 
     setEnergyThreshold(thresholdGeV) {
@@ -2460,7 +2510,8 @@ const GraphManager = {
             && !node.hasClass('gen-event-filtered')
             && !node.hasClass('sim-vertex-key0-filtered')
             && !node.hasClass('parton-shower-filtered')
-            && !node.hasClass('small-subgraph-filtered');
+            && !node.hasClass('small-subgraph-filtered')
+            && !node.hasClass('reco-filtered');
     },
 
     isEdgeVisibleForLayout(edge) {
@@ -2476,6 +2527,7 @@ const GraphManager = {
             && !edge.hasClass('sim-vertex-key0-filtered')
             && !edge.hasClass('parton-shower-filtered')
             && !edge.hasClass('small-subgraph-filtered')
+            && !edge.hasClass('reco-filtered')
             && this.isNodeVisibleForLayout(edge.source())
             && this.isNodeVisibleForLayout(edge.target());
     },

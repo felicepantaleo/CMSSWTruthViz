@@ -201,9 +201,13 @@ The graph direction comes from the DOT truth graph. Check the domain meaning bef
 Clicking a node opens the side panel with:
 
 - Compact summary: ID, particle name, PDG ID, energy, and momentum-like fields where available.
-- Ancestors and descendants.
+- Flat DOT attributes copied into the bundle, first in the panel.
 - Rendered DOT label.
-- Flat DOT attributes copied into the bundle.
+- Ancestors and descendants. These follow the truth lineage only: a match edge leads to a
+  reco object, which is neither a parent nor a child, so it is left out. The dependency
+  explorer walks the same way.
+- Association matches, when the node has any: the reco objects matched to a truth node, or
+  the truth nodes a reco object matched, each with its working points and score.
 - Breadcrumb history.
 
 The panel can be resized. Width is stored in `localStorage`.

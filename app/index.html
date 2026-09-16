@@ -108,6 +108,10 @@
                     </div>
                     <div class="filter-note truth-only" id="filter-status"></div>
                     <div id="working-point-control" class="hidden">
+                        <label class="checkbox-label" for="show-reco-checkbox" title="Show or hide the reco objects and their match edges">
+                            <input type="checkbox" id="show-reco-checkbox" checked />
+                            Show reco objects
+                        </label>
                         <div class="level-filter-title">Association working point</div>
                         <div id="working-point-items"></div>
                         <div class="filter-note" id="working-point-status"></div>
@@ -326,6 +330,14 @@
                         </div>
                     </div>
 
+                    <div id="parameters-section" class="section">
+                        <h3>DOT Attributes</h3>
+                        <div id="parameters-list"></div>
+                    </div>
+                    <div id="raw-snippet-section" class="section">
+                        <h3>Rendered DOT Label</h3>
+                        <div id="raw-snippet"></div>
+                    </div>
                     <div id="connected-towards-section" class="section">
                         <h3>Ancestors</h3>
                         <div id="connected-towards-list" class="connected-node-list"></div>
@@ -336,15 +348,12 @@
                         <div id="connected-away-list" class="connected-node-list"></div>
                     </div>
 
-                    <div id="raw-snippet-section" class="section">
-                        <h3>Rendered DOT Label</h3>
-                        <div id="raw-snippet"></div>
+                    <div id="matched-reco-section" class="section hidden">
+                        <h3>Association matches</h3>
+                        <div id="matched-reco-list" class="connected-node-list"></div>
                     </div>
 
-                    <div id="parameters-section" class="section">
-                        <h3>DOT Attributes</h3>
-                        <div id="parameters-list"></div>
-                    </div>
+
                 </div>
             </div>
         </div>

@@ -48,7 +48,8 @@ Nothing is fetched from the internet: the libraries come from `app/vendor`, the 
 | `demo/ttbar` | two tops, the b hadrons, 93 reco objects, the busiest | tens of seconds |
 
 Switch the working point with the radio buttons: the number of matched objects stays the
-same at every point, what moves is the truth node at the end of the dashed edge.
+same at every point, what moves is the truth node at the end of the dashed edge. Clear
+`Show reco objects` to put the overlay away and show the truth graph alone.
 
 `Direct hits` and `Subgraph hits` open the 3D panel: the beam axis runs horizontally, the
 CMS envelope and the subdetectors are drawn as transparent cylinders, and each subdetector
