@@ -53,10 +53,10 @@ Multiple results can be stepped through with the previous/next controls.
 Click a node to open the side panel. It shows:
 
 - Node ID, particle name, PDG ID, energy, and momentum-like fields when available.
-- All copied DOT attributes, first in the panel.
 - Rendered DOT label.
 - Ancestors and descendants, along the truth lineage only.
 - Association matches, when the node has any.
+- All copied DOT attributes.
 - Breadcrumb navigation history.
 
 The panel is resizable and stores width in `localStorage`.
