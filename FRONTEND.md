@@ -191,7 +191,11 @@ that can be switched on hide:
 
 - GenEvent nodes.
 - `SimVertex` nodes with `key=0`.
-- Parton-shower status-2 gluons.
+- The parton shower: the status window and the soft gluons of the older rule, plus the
+  shower bookkeeping that the main event now carries, which is a string, a cluster, a
+  diquark, a pomeron or a generator-internal state. Same species as
+  `truth::isShowerObject`, minus the bare partons, which the `partonJets` and
+  `hardProcess` levels do ask about.
 - Small disconnected components with fewer than 10 nodes.
 
 ## Search

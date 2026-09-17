@@ -1852,7 +1852,24 @@ const GraphManager = {
 
     isPartonShowerNode(node) {
         const status = Number.parseInt(node.data('status'), 10);
-        return (status > 30 && status < 80 && status!=62 && Math.abs(this.getParticlePdgId(node))!=6) || (this.getParticlePdgId(node) === 21 && ( !(status == 2 || status == 11 || status == 71 || status == 72) || this.getNodeEnergy(node)<10 ) );
+        return this.isShowerBookkeeping(this.getParticlePdgId(node))
+            || (status > 30 && status < 80 && status!=62 && Math.abs(this.getParticlePdgId(node))!=6) || (this.getParticlePdgId(node) === 21 && ( !(status == 2 || status == 11 || status == 71 || status == 72) || this.getNodeEnergy(node)<10 ) );
+    },
+
+    /**
+     * Report whether a PDG id names shower bookkeeping rather than a particle a
+     * detector could be asked about: a string, a cluster, a diquark, a pomeron or a
+     * generator-internal state. Same rule as truth::isShowerObject, minus the bare
+     * partons, which the levels partonJets and hardProcess do ask about. The main
+     * event now keeps its shower, so these reach the graph.
+     */
+    isShowerBookkeeping(pdgId) {
+        const id = Math.abs(Number.parseInt(pdgId, 10));
+        if (!Number.isFinite(id) || id === 0) return false;
+        if (id >= 91 && id <= 94) return true;
+        if (id === 990) return true;
+        if (id >= 1000 && id <= 9999 && Math.floor(id / 10) % 10 === 0 && Math.floor(id / 100) % 10 !== 0) return true;
+        return id >= 9900000 && id < 1000000000;
     },
 
     getSingleChildParentVertices(partonShowerNodes) {

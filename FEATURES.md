@@ -89,7 +89,7 @@ Every filter starts off. Header checkboxes can hide:
 
 - GenEvent nodes.
 - `SimVertex` nodes with `key=0`.
-- Parton-shower status-2 gluons, while preserving continuity with bypass edges.
+- The parton shower: soft gluons, the status window, and the strings, clusters and diquarks the main event carries.
 - Disconnected components with fewer than 10 nodes.
 
 ## 3D Rechit View
