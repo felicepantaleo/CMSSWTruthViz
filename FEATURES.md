@@ -22,6 +22,7 @@ Visual encodings include:
 Use the layout selector in the header:
 
 - Dagre: hierarchical layout, default.
+- ForceAtlas2: the Gephi force-directed layout, with Barnes-Hut repulsion.
 - fCoSE: force-directed layout.
 - ELK: layered layout with orthogonal routing.
 

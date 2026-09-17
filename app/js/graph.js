@@ -29,6 +29,7 @@ const GraphManager = {
     hiddenTruthLevels: new Set(),
     // The reco overlay is shown or hidden on its own, apart from the truth filters.
     showRecoObjects: true,
+    forceAtlas2Registered: false,
     hideSmallDisconnectedSubgraphs: false,
     smallDisconnectedSubgraphNodeLimit: 10,
     nodeTypeColors: {
@@ -1064,6 +1065,12 @@ const GraphManager = {
             }
         }
 
+        if (!this.forceAtlas2Registered && typeof ForceAtlas2Layout === 'function') {
+            // The layout registers itself when it is loaded next to cytoscape; this
+            // only records that it is there.
+            this.forceAtlas2Registered = true;
+        }
+
         if (!this.elkRegistered && typeof cytoscapeElk === 'function') {
             try {
                 cytoscape.use(cytoscapeElk);
@@ -1109,6 +1116,29 @@ const GraphManager = {
                 tile: true,
                 tilingPaddingVertical: 20,
                 tilingPaddingHorizontal: 20
+            };
+        }
+
+        if (this.selectedLayoutEngine === 'forceatlas2' && this.forceAtlas2Registered) {
+            return {
+                name: 'forceatlas2',
+                animate: false,
+                fit: false,
+                padding: 40,
+                // Gephi's defaults, with the two switches that suit a truth graph: a
+                // vertex with many daughters pushes them apart instead of pulling them
+                // together, and the node sizes keep the drawn boxes from settling on
+                // top of each other.
+                iterations: 400,
+                gravity: 1,
+                scalingRatio: 10,
+                outboundAttractionDistribution: true,
+                adjustSizes: true,
+                barnesHutTheta: 0.6,
+                nodeSize: (node) => {
+                    const box = node.boundingBox({ includeLabels: true, includeOverlays: false });
+                    return Math.max(box.w, box.h) / 2 + this.nodeSeparationMargin / 2;
+                }
             };
         }
 
@@ -2500,6 +2530,7 @@ const GraphManager = {
     getSelectedLayoutLabel() {
         if (this.selectedLayoutEngine === 'fcose') return 'fCoSE';
         if (this.selectedLayoutEngine === 'elk') return 'ELK';
+        if (this.selectedLayoutEngine === 'forceatlas2') return 'ForceAtlas2';
         return 'Dagre';
     },
 

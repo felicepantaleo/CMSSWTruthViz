@@ -161,6 +161,10 @@ The layout selector currently offers:
 - Dagre: hierarchical layout, selected by default.
 - fCoSE: force-directed layout for denser graph exploration.
 - ELK: layered layout with orthogonal edge routing.
+- ForceAtlas2: the force-directed layout of Jacomy et al. (PLoS ONE 9(6), 2014), the one
+  Gephi uses, implemented in `app/js/forceatlas2.js`. Repulsion is summed with a
+  Barnes-Hut quadtree, a vertex with many daughters pushes them apart instead of pulling
+  them together, and the node sizes enter the repulsion, labels included.
 
 Layouts are run on currently visible nodes plus edges whose endpoints are visible. A running layout shows a status pill and can be cancelled when the underlying layout engine supports `stop()`.
 
@@ -180,6 +184,19 @@ On the z_ee event, 422 nodes: 69 crossing pairs before and 21 after, 16 edges cr
 node before and 4 after, in 0.2 s. With Dagre, which minimises crossings itself, the pass
 takes the z_ee event from 15 crossings to 5 and the ttbar event from 133 to 128. No two
 node boxes overlap in any of these runs.
+
+The four engines on the same two events, crossing edge pairs before and after the pass,
+and the time the layout itself takes:
+
+| engine | z_ee, 422 nodes | ttbar, 2566 nodes |
+|---|---|---|
+| Dagre | 15 to 5, 0.3 s | 133 to 128, 1.8 s |
+| fCoSE | 66 to 7, 0.3 s | 1697 to 472, 1.5 s |
+| ForceAtlas2 | 2 to 1, 0.5 s | 226 to 121, 3.8 s |
+
+ForceAtlas2 draws the fewest crossings of the three force-directed runs, and it spreads
+the graph wider to do it: 9170 by 6290 against 5268 by 3543 for fCoSE on z_ee. Dagre stays
+the default because it is the only one that keeps the parent to child direction readable.
 
 Every filter collapses in one pass: the visible parents of the hidden nodes are joined
 to their visible children, so no node is left without an edge. The GenEvent filter and
