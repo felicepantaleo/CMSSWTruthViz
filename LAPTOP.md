@@ -1,7 +1,7 @@
 # Running the demo on a laptop
 
 The viewer needs no network while it runs: the JavaScript libraries are in `app/vendor`
-and the six events are in `demo/`. The one step that needs network is creating the Python
+and the eight events are in `demo/`. The one step that needs network is creating the Python
 environment, so do it before the talk.
 
 ## Once, with network
@@ -24,29 +24,38 @@ picks the first suitable interpreter it finds.
 ## During the talk, with or without network
 
 ```bash
-./load_event.sh              # lists the six events
+./load_event.sh              # lists the eight events
 ./load_event.sh demo/z_ee    # loads one and starts the server
 ```
 
 `load_event.sh` copies the associations of that event, builds its rechit table and starts
 the server on the graph. Stop it with Ctrl-C before loading another event.
 
-`./run.sh --dot demo/<event>/truthlogicalgraph_*.dot` works too: when the DOT sits in a
-prepared folder it loads that event's associations and rechit table by itself.
+`./run.sh --dot demo/<event>/truthlogicalgraph_*.dot.gz` works too: when the graph sits in
+a prepared folder it loads that event's associations and rechit table by itself. The graphs
+are stored gzipped and the preprocessing reads them as they are.
 
 Nothing is fetched from the internet: the libraries come from `app/vendor`, the data from
 `demo/`. An unstable connection cannot break the demo.
 
 ## Which event to show
 
-| folder | what to look at | opens in |
-|---|---|---|
-| `demo/z_ee` | the Z, its two electrons and their bremsstrahlung photons | a few seconds |
-| `demo/ten_taus_event4` | ten taus, decay modes, a three-prong trackster matched at the tau | a few seconds |
-| `demo/h_gammagamma` | two photons, a pair-conversion vertex | a few seconds |
-| `demo/vbf_h_invisible` | the Higgs to four neutrinos, leaves with no hits, the tagging jets | ten seconds |
-| `demo/ttbar` | two tops, the b hadrons, 93 reco objects, the busiest | tens of seconds |
-| `demo/ten_taus_v1` | the same ten taus dumped with truth-adaptive-associator-v1: the tau level split into hadronic and leptonic, the signal level, the initial-state vertex | ten seconds |
+| folder | what to look at | nodes | opens in |
+|---|---|---|---|
+| `demo/dy_to_tautau` | a Z to two taus, one hadronic and one leptonic, on the two new tau levels | 470 | a few seconds |
+| `demo/ten_taus_event4` | ten taus, the decay mode read off the decay vertex, 105 reco objects | 511 | a few seconds |
+| `demo/z_ee` | the Z, its two electrons and their bremsstrahlung photons | 422 | a few seconds |
+| `demo/ten_taus` | the same ten taus, with the signal level and the initial-state vertex | 1244 | a few seconds |
+| `demo/h_gammagamma` | the two photons of the Higgs, the signal level on the Higgs itself | 2551 | ten seconds |
+| `demo/dy_to_ee` | a Z to two electrons and their bremsstrahlung | 3147 | ten seconds |
+| `demo/ttbar` | two tops, their b hadrons, 216 reco objects, the busiest | 7701 | a minute |
+| `demo/vbf_h_invisible` | the Higgs to four neutrinos, leaves with no hits, the tagging jets | 873 | ten seconds |
+
+`ttbar` is big because the main event now keeps its parton shower and every spectator keeps
+its SIM subgraph. Set `Hide E <` to 1 GeV to bring it from 7701 nodes to 2079.
+
+The layout selector offers Dagre, which keeps the parent to child direction, fCoSE, ELK and
+ForceAtlas2. ForceAtlas2 draws the fewest crossing edges of the three force-directed ones.
 
 Switch the working point with the radio buttons: the number of matched objects stays the
 same at every point, what moves is the truth node at the end of the dashed edge. Clear

@@ -5,6 +5,7 @@ Extracts nodes, edges, and builds label-to-ID mapping.
 """
 
 import sys
+import gzip
 import json
 import re
 import pydot
@@ -464,8 +465,13 @@ def parse_dot_file(dot_path):
     """
     print(f"Parsing DOT file: {dot_path}")
 
-    # Load DOT file
-    graphs = pydot.graph_from_dot_file(dot_path)
+    # Load DOT file. A truth graph that keeps the shower of the main event runs to
+    # tens of megabytes and compresses about twenty times, so a .dot.gz is read too.
+    if str(dot_path).endswith(".gz"):
+        with gzip.open(dot_path, "rt", encoding="utf-8") as source:
+            graphs = pydot.graph_from_dot_data(source.read())
+    else:
+        graphs = pydot.graph_from_dot_file(dot_path)
     if not graphs:
         raise ValueError(f"Failed to parse DOT file: {dot_path}")
 
