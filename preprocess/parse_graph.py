@@ -108,30 +108,44 @@ def vertex_key_from_attrs(node_id, attrs, data_attrs):
 
 
 # Truth levels, most signal-like first. The dominant level drives the node colour.
+# The levels a particle can carry, most signal-like first. The names are the ones
+# PhysicsTools/TruthInfo/interface/TruthLevels.h writes, plus "signal", which the
+# selection post-processing owns and the dumper appends to the same attribute.
+# visibleTau and stableLegsFromUpstream are the earlier spelling of the name above
+# them; each keeps the rank of its successor, so a DOT dumped before the rename
+# reads exactly as it did.
 TRUTH_LEVEL_ORDER = (
+    "signal",
     "hardProcess",
     "partonJets",
     "bHadrons",
     "cHadrons",
+    "tauVisibleHadronic",
+    "tauVisibleLeptonic",
     "visibleTau",
     "reconstructableFromSignal",
     "reconstructableFinalState",
+    "stableLegsFromInitialState",
     "stableLegsFromUpstream",
     "stableDecayProducts",
     "caloBoundary",
     "underlyingEvent",
 )
 
-# Roles of the artificial vertices the post-processor adds.
+# Roles of the artificial vertices the post-processor adds. "isr/upstream" is the
+# earlier name of the initial-state role, kept for a DOT dumped before the rename.
 ARTIFICIAL_ROLES = {
     "interaction": "interaction",
-    "isr/upstream": "upstream",
+    "initial state": "initialState",
+    "isr/upstream": "initialState",
+    "beam side input": "beamSideInput",
     "underlying event": "underlyingEvent",
 }
 
 ARTIFICIAL_ROLE_TITLES = {
     "interaction": "hard interaction",
-    "upstream": "ISR / upstream",
+    "initialState": "initial state",
+    "beamSideInput": "beam side input",
     "underlyingEvent": "underlying event",
 }
 

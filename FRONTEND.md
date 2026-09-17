@@ -60,13 +60,20 @@ level, its hit footprint and its role. GEN and SIM provenance is not used.
 each node, and the frontend maps them onto the canvas:
 
 - Shape carries the node kind: ellipse for a particle, diamond for a vertex, and
-  star, pentagon or rounded rectangle for the three artificial vertices the
-  post-processor adds (`domain=Internal`, `role=interaction`, `ISR/upstream`,
-  `underlying event`).
-- Fill carries the dominant truth level, most signal-like first: `hardProcess`,
-  `partonJets`, `reconstructableFromSignal`, `stableLegsFromUpstream`,
-  `stableDecayProducts`, `caloBoundary`, `underlyingEvent`. A particle usually
-  carries several levels; the hover summary lists them all.
+  star, pentagon, rhomboid or rounded rectangle for the four artificial vertices the
+  post-processor adds (`domain=Internal`, `role=interaction`, `initial state`,
+  `beam side input`, `underlying event`).
+- Fill carries the dominant truth level, most signal-like first: `signal`,
+  `hardProcess`, `partonJets`, `bHadrons`, `cHadrons`, `tauVisibleHadronic`,
+  `tauVisibleLeptonic`, `reconstructableFromSignal`, `reconstructableFinalState`,
+  `stableLegsFromInitialState`, `stableDecayProducts`, `caloBoundary`,
+  `underlyingEvent`. These are the names of
+  `PhysicsTools/TruthInfo/interface/TruthLevels.h`, plus `signal`, which the
+  selection post-processing owns and the dumper appends to the same attribute. The
+  two earlier names, `visibleTau` and `stableLegsFromUpstream`, keep the rank of the
+  name that replaced them and appear in the filters and the legend only when the
+  graph on screen carries them. A particle usually carries several levels; the hover
+  summary lists them all.
 - Border width carries the hit footprint: calo rec hits, calo sim hits only,
   tracker or MTD or muon only, and no hits, which is drawn dashed.
 - Border style and colour carry the markers: a double ring for the root of a

@@ -1254,6 +1254,10 @@ body {
     clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
 }
 
+.legend-rhomboid {
+    clip-path: polygon(22% 0%, 100% 0%, 78% 100%, 0% 100%);
+}
+
 .legend-rounded {
     border-radius: 6px;
 }

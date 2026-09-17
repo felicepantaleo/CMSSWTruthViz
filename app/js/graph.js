@@ -44,51 +44,71 @@ const GraphManager = {
     // Same order as TRUTH_LEVEL_ORDER in preprocess/parse_graph.py, most
     // signal-like first. This is the only place the precedence is written down.
     truthLevelOrder: [
-        'hardProcess', 'partonJets', 'bHadrons', 'cHadrons', 'visibleTau',
+        'signal', 'hardProcess', 'partonJets', 'bHadrons', 'cHadrons',
+        'tauVisibleHadronic', 'tauVisibleLeptonic', 'visibleTau',
         'reconstructableFromSignal', 'reconstructableFinalState',
-        'stableLegsFromUpstream', 'stableDecayProducts', 'caloBoundary',
-        'underlyingEvent'
+        'stableLegsFromInitialState', 'stableLegsFromUpstream',
+        'stableDecayProducts', 'caloBoundary', 'underlyingEvent'
     ],
     truthLevelLabels: {
+        signal: 'signal',
         hardProcess: 'hard process',
         partonJets: 'parton jet',
         bHadrons: 'b hadron',
         cHadrons: 'c hadron',
-        visibleTau: 'visible tau',
+        tauVisibleHadronic: 'visible tau, hadronic',
+        tauVisibleLeptonic: 'visible tau, leptonic',
         reconstructableFromSignal: 'reconstructable from signal',
         reconstructableFinalState: 'reconstructable final state',
-        stableLegsFromUpstream: 'stable leg from upstream',
+        stableLegsFromInitialState: 'stable leg from initial state',
         stableDecayProducts: 'stable decay product',
         caloBoundary: 'calo boundary',
         underlyingEvent: 'underlying event',
+        visibleTau: 'visible tau (old name)',
+        stableLegsFromUpstream: 'stable leg from upstream (old name)',
         none: 'no level'
     },
+    // The canvas keeps the colourblind-safe palette rather than the pale label
+    // backgrounds of the DOT dump: a fill behind white text needs the contrast.
     truthLevelColors: {
+        signal: '#d35fb7',
         hardProcess: '#bd1f01',
         partonJets: '#e76300',
         bHadrons: '#a96b59',
         cHadrons: '#d0a190',
-        visibleTau: '#717581',
+        tauVisibleHadronic: '#717581',
+        tauVisibleLeptonic: '#a8adb8',
         reconstructableFromSignal: '#832db6',
         reconstructableFinalState: '#c3a3e0',
-        stableLegsFromUpstream: '#3f90da',
+        stableLegsFromInitialState: '#3f90da',
         stableDecayProducts: '#92dadd',
         caloBoundary: '#b9ac70',
         underlyingEvent: '#94a4a2',
+        visibleTau: '#717581',
+        stableLegsFromUpstream: '#3f90da',
         none: '#e8e8e8'
     },
+    // Names the dumper wrote before the rename. They are listed in the filters and in
+    // the legend only when the graph on screen carries them.
+    truthLegacyLevels: new Set(['visibleTau', 'stableLegsFromUpstream']),
     truthLevelDarkFills: new Set([
-        '#bd1f01', '#e76300', '#832db6', '#3f90da', '#a96b59', '#717581'
+        '#bd1f01', '#e76300', '#832db6', '#3f90da', '#a96b59', '#717581', '#d35fb7'
     ]),
     truthVertexColor: '#d9d9d9',
+    // upstream is the earlier name of the initial-state role, kept so a bundle built
+    // before the rename still draws its artificial vertex.
     truthArtificialColors: {
         interaction: '#ffa90e',
+        initialState: '#a96b59',
         upstream: '#a96b59',
+        beamSideInput: '#b9ac70',
         underlyingEvent: '#94a4a2'
     },
     truthArtificialShapes: {
         interaction: 'star',
+        initialState: 'pentagon',
         upstream: 'pentagon',
+        beamSideInput: 'rhomboid',
         underlyingEvent: 'round-rectangle'
     },
     // Border width carries the hit footprint. No hits is drawn dashed.
@@ -114,12 +134,15 @@ const GraphManager = {
     // node is tried against when the untangle pass looks for a swap.
     crossingGridCell: 300,
     untanglePartnerLimit: 10,
+    // One colour per association domain of
+    // SimGeneral/TruthGraphAssociatorProducers/python/truthGraphAssociationLabels_cff.py.
     recoDomainColors: {
         tracksters: '#0d7d8c',
         tracks: '#5b6ee1',
-        pfCandidates: '#c46a1b',
-        jets: '#6a7b2e',
-        vertices: '#8c5a8c'
+        vertices: '#8c5a8c',
+        secondaryVertices: '#b07aa1',
+        pfClustersEcal: '#c46a1b',
+        pfClustersHcal: '#6a7b2e'
     },
     activeWorkingPoint: '',
     workingPoints: [],
@@ -277,7 +300,12 @@ const GraphManager = {
             ticlTrackstersCLUE3DHigh: 'CLUE3D trackster',
             ticlTracksterLinks: 'linked trackster',
             ticlTracksterLinksSuperclusteringDNN: 'supercluster',
-            ticlCandidate: 'TICL candidate'
+            ticlCandidate: 'TICL candidate',
+            particleFlowClusterECAL: 'ECAL PF cluster',
+            particleFlowClusterHCAL: 'HCAL PF cluster',
+            generalTracks: 'track',
+            offlinePrimaryVertices: 'primary vertex',
+            inclusiveSecondaryVertices: 'secondary vertex'
         };
         return known[collection] || String(collection).replace(/^ticl/, '');
     },
@@ -1312,7 +1340,7 @@ const GraphManager = {
         if (!items) return;
 
         items.innerHTML = '';
-        const levels = [...this.truthLevelOrder, 'none'];
+        const levels = this.levelsForControls();
         levels.forEach((level) => {
             const label = document.createElement('label');
             label.className = 'checkbox-label level-filter-item';
@@ -1347,6 +1375,18 @@ const GraphManager = {
     },
 
     /**
+     * The levels the filter list and the legend show: the current vocabulary, plus
+     * an older name only when the graph on screen still uses it.
+     */
+    levelsForControls() {
+        const present = new Set();
+        if (this.cy) {
+            this.cy.nodes().forEach(node => this.truthLevelsOf(node).forEach(level => present.add(level)));
+        }
+        return [...this.truthLevelOrder.filter(level => !this.truthLegacyLevels.has(level) || present.has(level)), 'none'];
+    },
+
+    /**
      * Fill the truth-level legend from the same vocabulary the filters use, so the
      * two can never drift apart.
      */
@@ -1355,7 +1395,7 @@ const GraphManager = {
         if (!container) return;
 
         container.innerHTML = '';
-        [...this.truthLevelOrder, 'none'].forEach((level) => {
+        this.levelsForControls().forEach((level) => {
             const item = document.createElement('div');
             item.className = 'legend-item';
 
