@@ -46,6 +46,7 @@ Nothing is fetched from the internet: the libraries come from `app/vendor`, the 
 | `demo/h_gammagamma` | two photons, a pair-conversion vertex | a few seconds |
 | `demo/vbf_h_invisible` | the Higgs to four neutrinos, leaves with no hits, the tagging jets | ten seconds |
 | `demo/ttbar` | two tops, the b hadrons, 93 reco objects, the busiest | tens of seconds |
+| `demo/ten_taus_v1` | the same ten taus dumped with truth-adaptive-associator-v1: the tau level split into hadronic and leptonic, the signal level, the initial-state vertex | ten seconds |
 
 Switch the working point with the radio buttons: the number of matched objects stays the
 same at every point, what moves is the truth node at the end of the dashed edge. Clear

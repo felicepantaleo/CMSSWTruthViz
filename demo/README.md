@@ -1,6 +1,6 @@
 # Prepared events
 
-Six single events, ready to open in the viewer. Each folder holds the truth graph as DOT,
+Seven single events, ready to open in the viewer. Each folder holds the truth graph as DOT,
 the trackster associations of the same event as JSON, the rechit table as NanoAOD, the
 graph rendered to PDF, and `event.json` with the event index inside the rechit table.
 The three viewer inputs come from one `cmsRun` job, so the particle indices in the JSON
@@ -19,10 +19,19 @@ refer to the nodes of the DOT next to it.
 | `ttbar` | TTbar 14 TeV | 7 | 2566 | 93 |
 | `vbf_h_invisible` | VBF H to ZZ to four neutrinos | 1 | 873 | 47 |
 | `h_gammagamma` | H125 to two photons, gluon fusion | 8 | 338 | 43 |
+| `ten_taus_v1` | TenTau 15 to 500 GeV | 3 | 1244 | 39 |
 
-All six: Run4 D122, era `Phase2C26I13M9`, conditions `auto:phase2_realistic_T35`, no
+The first six: Run4 D122, era `Phase2C26I13M9`, conditions `auto:phase2_realistic_T35`, no
 pileup, `CMSSW_20_1_X_2026-09-03-1100` with the `truth-adaptive-associator-v1-recoviz`
 branch. `event.json` records the dumper preset of each one.
+
+`ten_taus_v1` is the only one dumped with the current `truth-adaptive-associator-v1`, on
+`CMSSW_20_1_X_2026-09-06-2300`, so it is the one that carries the new vocabulary: the tau
+level split into `tauVisibleHadronic` and `tauVisibleLeptonic`, `stableLegsFromInitialState`
+in place of `stableLegsFromUpstream`, the `signal` level, and the `initial state` vertex
+role. Its RECO input is a Run4 D120 relval step3 produced with `CMSSW_20_1_0_pre2`, read on
+the v1 base with the renamed TICL association products dropped, so only its truth graph is
+v1; the six above are v1 end to end.
 
 Start with `z_ee`: the two electrons and their bremsstrahlung photons show what the
 adaptive match does, and the layout opens in a few seconds. `ttbar` is the busiest and
