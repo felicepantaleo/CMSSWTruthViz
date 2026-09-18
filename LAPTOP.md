@@ -12,7 +12,7 @@ cd CMSSWTruthViz
 ./load_event.sh demo/z_ee
 ```
 
-The first run creates `venv/` and installs `pydot`, `networkx`, `particle` and `uproot`.
+The first run creates `venv/` and installs `networkx`, `particle` and `uproot`.
 It then loads the event and starts the server, which prints its URL, normally
 <http://localhost:8009/app/>. Open it and check three things: the graph appears, the teal
 reco objects hang under the particles they matched, and clicking a node with hits and

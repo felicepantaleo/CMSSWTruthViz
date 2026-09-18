@@ -139,7 +139,7 @@ source venv/bin/activate
 
 # Check if dependencies are installed
 echo "Checking dependencies..."
-if ! python -c "import pydot; import networkx" 2>/dev/null; then
+if ! python -c "import networkx" 2>/dev/null; then
     echo "Installing Python dependencies..."
     pip install -q -r preprocess/requirements.txt
     echo "✓ Dependencies installed"

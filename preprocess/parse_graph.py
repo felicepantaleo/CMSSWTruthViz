@@ -5,11 +5,11 @@ Extracts nodes, edges, and builds label-to-ID mapping.
 """
 
 import sys
-import gzip
 import json
 import re
-import pydot
 import networkx as nx
+
+from dot_reader import read_dot
 from pathlib import Path
 from particle import Particle
 
@@ -29,7 +29,7 @@ GRAPH_STYLE_ATTRIBUTES = {
 
 
 def clean_attr_value(value):
-    """Normalize pydot attribute values for display and JSON output."""
+    """Normalize a DOT attribute value for display and JSON output."""
     if not isinstance(value, str):
         return value
 
@@ -465,22 +465,14 @@ def parse_dot_file(dot_path):
     """
     print(f"Parsing DOT file: {dot_path}")
 
-    # Load DOT file. A truth graph that keeps the shower of the main event runs to
-    # tens of megabytes and compresses about twenty times, so a .dot.gz is read too.
-    if str(dot_path).endswith(".gz"):
-        with gzip.open(dot_path, "rt", encoding="utf-8") as source:
-            graphs = pydot.graph_from_dot_data(source.read())
-    else:
-        graphs = pydot.graph_from_dot_file(dot_path)
-    if not graphs:
-        raise ValueError(f"Failed to parse DOT file: {dot_path}")
-
-    graph = graphs[0]
-    graph_name = clean_attr_value(graph.get_name() or "")
+    # A truth graph that keeps the shower of the main event runs to tens of
+    # megabytes, and dot_reader also takes it gzipped.
+    graph = read_dot(dot_path)
+    graph_name = clean_attr_value(graph["graph_name"])
     is_logical_graph = graph_name == "TruthLogicalGraph"
 
     # Create NetworkX graph (preserve direction if digraph)
-    is_directed = graph.get_type() == "digraph"
+    is_directed = graph["is_directed"]
     G = nx.DiGraph() if is_directed else nx.Graph()
 
     # Parse nodes
@@ -488,18 +480,7 @@ def parse_dot_file(dot_path):
     label_to_id = {}
     valid_node_ids = set()
 
-    for node in graph.get_nodes():
-        node_name = node.get_name()
-
-        # Skip special DOT keywords
-        if node_name in ("node", "graph", "edge"):
-            continue
-
-        # Remove quotes from node name
-        node_id = node_name.strip('"')
-
-        # Get attributes
-        attrs = node.get_attributes()
+    for node_id, attrs in graph["nodes"]:
         clean_attrs = {
             key: clean_attr_value(value)
             for key, value in attrs.items()
@@ -572,17 +553,11 @@ def parse_dot_file(dot_path):
     edges = []
     skipped_edges = 0
 
-    for edge in graph.get_edges():
-        source = edge.get_source().strip('"')
-        target = edge.get_destination().strip('"')
-
+    for source, target, attrs in graph["edges"]:
         # Skip edges that reference non-existent nodes
         if source not in valid_node_ids or target not in valid_node_ids:
             skipped_edges += 1
             continue
-
-        # Get attributes
-        attrs = edge.get_attributes()
 
         edge_obj = {
             "source": source,

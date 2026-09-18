@@ -14,13 +14,13 @@ This repository is a Python-assisted static web app. The frontend has no npm bui
 Python packages:
 
 ```text
-pydot
 networkx
 particle
 uproot
 ```
 
-Graphviz command-line tools are useful for validating DOT files, but the current preprocessing path parses DOT with `pydot`.
+Graphviz command-line tools are useful for validating DOT files and for rendering a
+graph to PDF. The preprocessing reads the DOT itself, with `preprocess/dot_reader.py`.
 
 ## CMSSW Area
 
