@@ -36,6 +36,8 @@ app/js/bundle.js
 app/js/rechits.js
 app/js/associations.js
 data/associations.json
+samples/local-catalog.json
+samples/local/
 
 # IDE
 .vscode/

@@ -11,12 +11,30 @@ usage() {
 Usage: ./run.sh [options]
 
 Options:
+  -d, --dot FILE     Open this DOT file. When the DOT sits in a prepared event folder
+                     (event.json and rechits_nano.root next to it), the rechits and the
+                     reco associations of that event are loaded too.
   -h, --help         Show this help message
+
+Without --dot the page opens the launcher: browser sessions, the sample catalogue
+and CMSSW ROOT processing.
 EOF
 }
 
+DOT_FILE=""
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
+        -d|--dot)
+            if [ "$#" -lt 2 ]; then
+                echo "Error: $1 requires a file path"
+                echo ""
+                usage
+                exit 1
+            fi
+            DOT_FILE="$2"
+            shift 2
+            ;;
         -h|--help)
             usage
             exit 0
@@ -29,6 +47,11 @@ while [ "$#" -gt 0 ]; do
             ;;
     esac
 done
+
+if [ -n "$DOT_FILE" ] && [ ! -f "$DOT_FILE" ]; then
+    echo "Error: DOT file not found: $DOT_FILE"
+    exit 1
+fi
 
 echo "============================================================"
 echo "Truth Graph Viewer"
@@ -225,6 +248,36 @@ if [ -z "${TRUTHVIZ_CMSRUN_WRAPPER:-}" ]; then
             echo ""
         fi
     fi
+fi
+
+# With --dot, build the event into data/ for the static page, and add it to a catalogue
+# as the sample "local", because the server opens events only from the catalogue.
+if [ -n "$DOT_FILE" ]; then
+    DOT_FILE_ABS="$(cd "$(dirname "$DOT_FILE")" && pwd)/$(basename "$DOT_FILE")"
+    EVENT_DIR="$(dirname "$DOT_FILE_ABS")"
+    echo "Using DOT file: $DOT_FILE_ABS"
+    mkdir -p data
+    rm -f data/rechits.json data/associations.json app/js/rechits.js app/js/associations.js
+    "$VENV_PYTHON" preprocess/build_bundle.py "$DOT_FILE_ABS" data/bundle.json > /dev/null
+    if [ -f "$EVENT_DIR/event.json" ]; then
+        echo "Loading the rechits and the associations of $(basename "$EVENT_DIR")..."
+        if [ -f "$EVENT_DIR/trackster_associations.json" ]; then
+            cp "$EVENT_DIR/trackster_associations.json" data/associations.json
+            "$VENV_PYTHON" preprocess/generate_associations_js.py > /dev/null
+        fi
+        if [ -f "$EVENT_DIR/rechits_nano.root" ]; then
+            event_index=$("$VENV_PYTHON" -c "import json, sys; print(json.load(open(sys.argv[1]))['eventIndex'])" \
+                "$EVENT_DIR/event.json")
+            "$VENV_PYTHON" preprocess/build_rechits_json.py "$EVENT_DIR/rechits_nano.root" \
+                data/rechits.json --event-index "$event_index" > /dev/null
+        fi
+    fi
+    base_catalog="${TRUTHVIZ_CATALOG:-$SCRIPT_DIR/samples/catalog.json}"
+    TRUTHVIZ_CATALOG="$("$VENV_PYTHON" preprocess/build_local_catalog.py "$base_catalog" data \
+        --label "$(basename "$DOT_FILE_ABS")" --description "$DOT_FILE_ABS")"
+    export TRUTHVIZ_CATALOG
+    export TRUTHVIZ_START_CATALOG=local
+    echo "Event ready: sample \"local\" in $TRUTHVIZ_CATALOG"
 fi
 
 # Start server

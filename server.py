@@ -503,6 +503,9 @@ def main():
         auto_find_port=args.auto_find_port, max_attempts=args.max_port_attempts,
     )
     print(f"Truth Graph Viewer: http://{args.host}:{port}/app/")
+    start_catalog = os.environ.get("TRUTHVIZ_START_CATALOG")
+    if start_catalog:
+        print(f"Event from --dot: http://{args.host}:{port}/app/?catalog={start_catalog}")
     try:
         with httpd:
             httpd.serve_forever()
