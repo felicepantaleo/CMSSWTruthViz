@@ -3,8 +3,9 @@
   "event": 4,
   "nodes": 511,
   "reco": 105,
-  "preset": "-s 15,-15 -d 0 --no-keepSpectators --attachSources",
+  "preset": "-s 15,-15 -d 0 --no-keepSpectators --attachSources --geometry ExtendedRun4D120",
   "look": "ten taus, the decay mode read off the decay vertex, and 105 reco objects to follow through the working points",
   "dot": "truthlogicalgraph_run1_lumi1_event4.dot.gz",
-  "eventIndex": 0
+  "eventIndex": 0,
+  "release": "CMSSW_20_1_X_2026-10-27-2300"
 }

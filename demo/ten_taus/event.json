@@ -1,10 +1,11 @@
 {
   "sample": "TenTau_E_15_500_pythia8",
   "event": 3,
-  "nodes": 1244,
+  "nodes": 1245,
   "reco": 39,
-  "preset": "-s 15,-15 -d 0 --no-keepSpectators --attachSources",
-  "look": "the truth-adaptive-associator-v1 vocabulary: seven hadronic and three leptonic taus on their own levels, the signal level on the resonance, and the initial-state vertex",
+  "preset": "-s 15,-15 -d 0 --no-keepSpectators --attachSources --geometry ExtendedRun4D120",
+  "look": "seven hadronic and three leptonic taus on their own levels, the signal level on the shot taus, and the initial-state vertex",
   "dot": "truthlogicalgraph_run1_lumi1_event3.dot.gz",
-  "eventIndex": 1
+  "eventIndex": 0,
+  "release": "CMSSW_20_1_X_2026-10-27-2300"
 }

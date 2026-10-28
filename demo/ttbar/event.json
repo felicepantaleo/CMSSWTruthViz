@@ -3,8 +3,9 @@
   "event": 7,
   "nodes": 7701,
   "reco": 216,
-  "preset": "-s 6,-6 -d 1 --keepSpectators --attachSources --keepProductionSiblings",
-  "look": "two tops, their b hadrons on the bHadrons level, 216 reco objects: the busiest event, and the one where the parton shower of the main event shows",
+  "preset": "-s 6,-6 -d 1 --keepSpectators --attachSources --keepProductionSiblings --geometry ExtendedRun4D120",
+  "look": "two tops, their b hadrons on the bHadrons level, ShowerBranching and Hadronization vertices in the parton shower, and 216 reco objects: the busiest event",
   "dot": "truthlogicalgraph_run1_lumi1_event7.dot.gz",
-  "eventIndex": 0
+  "eventIndex": 0,
+  "release": "CMSSW_20_1_X_2026-10-27-2300"
 }

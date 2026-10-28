@@ -3,8 +3,9 @@
   "event": 3,
   "nodes": 3147,
   "reco": 43,
-  "preset": "-s 23,32 -d 1 -g 11,-11 --keepSpectators --attachSources",
+  "preset": "-s 23,32 -d 1 -g 11,-11 --keepSpectators --attachSources --geometry ExtendedRun4D120",
   "look": "a Z to two electrons, their bremsstrahlung photons, and the signal level on the Z",
   "dot": "truthlogicalgraph_run1_lumi1_event3.dot.gz",
-  "eventIndex": 0
+  "eventIndex": 0,
+  "release": "CMSSW_20_1_X_2026-10-27-2300"
 }
