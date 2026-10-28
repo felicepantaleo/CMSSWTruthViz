@@ -7,5 +7,5 @@
   "look": "ten taus, the decay mode read off the decay vertex, and 105 reco objects to follow through the working points",
   "dot": "truthlogicalgraph_run1_lumi1_event4.dot.gz",
   "eventIndex": 0,
-  "release": "CMSSW_20_1_X_2026-10-27-2300"
+  "release": "CMSSW_20_1_X_2026-10-27-2300 + truth-keep-calo-pfrechits (step3 rerun)"
 }

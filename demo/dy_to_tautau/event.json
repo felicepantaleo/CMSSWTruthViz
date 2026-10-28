@@ -7,5 +7,5 @@
   "look": "a Z to two taus on the tau levels, the signal level on the Z, and the HardScatter vertex the Z comes out of; the fastest event to open",
   "dot": "truthlogicalgraph_run1_lumi1_event7.dot.gz",
   "eventIndex": 0,
-  "release": "CMSSW_20_1_X_2026-10-27-2300"
+  "release": "CMSSW_20_1_X_2026-10-27-2300 + truth-keep-calo-pfrechits (step3 rerun)"
 }

@@ -7,5 +7,5 @@
   "look": "two tops, their b hadrons on the bHadrons level, ShowerBranching and Hadronization vertices in the parton shower, and 216 reco objects: the busiest event",
   "dot": "truthlogicalgraph_run1_lumi1_event7.dot.gz",
   "eventIndex": 0,
-  "release": "CMSSW_20_1_X_2026-10-27-2300"
+  "release": "CMSSW_20_1_X_2026-10-27-2300 + truth-keep-calo-pfrechits (step3 rerun)"
 }

@@ -7,5 +7,5 @@
   "look": "seven hadronic and three leptonic taus on their own levels, the signal level on the shot taus, and the initial-state vertex",
   "dot": "truthlogicalgraph_run1_lumi1_event3.dot.gz",
   "eventIndex": 0,
-  "release": "CMSSW_20_1_X_2026-10-27-2300"
+  "release": "CMSSW_20_1_X_2026-10-27-2300 + truth-keep-calo-pfrechits (step3 rerun)"
 }
