@@ -315,9 +315,9 @@ def truth_classification(node_id, attrs):
         reason = str(data_attrs.get("reason", "") or "").strip()
         in_count = parse_count(data_attrs.get("nIn"))
         out_count = parse_count(data_attrs.get("nOut"))
-        # The same title the dumper writes in the first row of the DOT label. The
-        # reason comes from the Geant4 process, so a GEN-only vertex has none and
-        # the topology names it: one incoming particle decays, more produce.
+        # The same title the dumper writes in the first row of the DOT label: the
+        # reason when it is known, else the topology (one incoming particle decays,
+        # more produce).
         if reason and reason != "Unknown":
             title = reason
         else:
