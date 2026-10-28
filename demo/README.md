@@ -52,6 +52,10 @@ vocabularies.
 
 `event.json` records the release and the dumper preset of each event.
 
+Every graph is dumped with `dumpSimHits=True`, so each node carries the DetIds of its hits in
+`directHitsDetIds`. The 3D panel joins them with the rechit table by DetId. Without it the
+panel draws no hits.
+
 Start with `dy_to_tautau`: a Z to two taus, which is the smallest graph and shows the tau
 levels and the `HardScatter` vertex. `ttbar` is the busiest: the main event keeps its
 parton shower, so `ShowerBranching` and `Hadronization` vertices show, and every spectator
